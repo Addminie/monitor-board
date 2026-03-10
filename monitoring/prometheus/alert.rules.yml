@@ -1,5 +1,19 @@
-groups:
-  - name: monitor-board-defaults
+﻿groups:
+  - name: monitor-board-recordings
+    interval: 30s
+    rules:
+      - record: monitor:cpu_usage_percent:avg
+        expr: avg by (job, target, env, business, room, owner) (monitor_cpu_usage_percent{job="monitor-agent"})
+      - record: monitor:memory_usage_percent:avg
+        expr: avg by (job, target, env, business, room, owner) (monitor_memory_usage_percent{job="monitor-agent"})
+      - record: monitor:disk_usage_percent:max
+        expr: max by (job, target, env, business, room, owner) (monitor_disk_usage_percent{job="monitor-agent"})
+      - record: monitor:network_throughput_bytes_per_second:sum
+        expr: sum by (job, target, env, business, room, owner) (monitor_network_rx_bytes_per_second{job="monitor-agent"} + monitor_network_tx_bytes_per_second{job="monitor-agent"})
+      - record: monitor:service_failed_total:max
+        expr: max by (job, target, env, business, room, owner) (monitor_service_failed_total{job="monitor-agent"})
+
+  - name: monitor-board-alerts
     interval: 15s
     rules:
       - alert: TargetOffline
@@ -9,75 +23,75 @@ groups:
           severity: offline
           source: monitor-board
         annotations:
-          summary: "目标离线: {{ $labels.target }}"
-          description: "Prometheus 无法抓取 {{ $labels.target }} ({{ $labels.instance }}) 的 /metrics。"
+          summary: "Target offline: {{ $labels.target }}"
+          description: "Prometheus cannot scrape {{ $labels.target }} ({{ $labels.instance }}) /metrics."
 
-      - alert: HighCPUWarning
-        expr: monitor_cpu_usage_percent{job="monitor-agent"} >= 85
+      - alert: HostHighCPUWarning
+        expr: monitor:cpu_usage_percent:avg >= 85
         for: 2m
         labels:
           severity: warn
           source: monitor-board
         annotations:
-          summary: "CPU 预警: {{ $labels.target }}"
-          description: "CPU 使用率 {{ $value | printf \"%.1f\" }}% >= 85%。"
+          summary: "CPU warning: {{ $labels.target }}"
+          description: "CPU usage {{ $value | printf \"%.1f\" }}% >= 85%."
 
-      - alert: HighCPUDanger
-        expr: monitor_cpu_usage_percent{job="monitor-agent"} >= 95
+      - alert: HostHighCPUDanger
+        expr: monitor:cpu_usage_percent:avg >= 95
         for: 1m
         labels:
           severity: danger
           source: monitor-board
         annotations:
-          summary: "CPU 危险: {{ $labels.target }}"
-          description: "CPU 使用率 {{ $value | printf \"%.1f\" }}% >= 95%。"
+          summary: "CPU danger: {{ $labels.target }}"
+          description: "CPU usage {{ $value | printf \"%.1f\" }}% >= 95%."
 
-      - alert: HighMemoryWarning
-        expr: monitor_memory_usage_percent{job="monitor-agent"} >= 85
+      - alert: HostHighMemoryWarning
+        expr: monitor:memory_usage_percent:avg >= 85
         for: 2m
         labels:
           severity: warn
           source: monitor-board
         annotations:
-          summary: "内存预警: {{ $labels.target }}"
-          description: "内存使用率 {{ $value | printf \"%.1f\" }}% >= 85%。"
+          summary: "Memory warning: {{ $labels.target }}"
+          description: "Memory usage {{ $value | printf \"%.1f\" }}% >= 85%."
 
-      - alert: HighMemoryDanger
-        expr: monitor_memory_usage_percent{job="monitor-agent"} >= 95
+      - alert: HostHighMemoryDanger
+        expr: monitor:memory_usage_percent:avg >= 95
         for: 1m
         labels:
           severity: danger
           source: monitor-board
         annotations:
-          summary: "内存危险: {{ $labels.target }}"
-          description: "内存使用率 {{ $value | printf \"%.1f\" }}% >= 95%。"
+          summary: "Memory danger: {{ $labels.target }}"
+          description: "Memory usage {{ $value | printf \"%.1f\" }}% >= 95%."
 
-      - alert: HighDiskWarning
-        expr: max by (instance, target, env) (monitor_disk_usage_percent{job="monitor-agent"}) >= 80
+      - alert: HostHighDiskWarning
+        expr: monitor:disk_usage_percent:max >= 80
         for: 3m
         labels:
           severity: warn
           source: monitor-board
         annotations:
-          summary: "磁盘预警: {{ $labels.target }}"
-          description: "磁盘峰值占用 {{ $value | printf \"%.1f\" }}% >= 80%。"
+          summary: "Disk warning: {{ $labels.target }}"
+          description: "Disk max usage {{ $value | printf \"%.1f\" }}% >= 80%."
 
-      - alert: HighDiskDanger
-        expr: max by (instance, target, env) (monitor_disk_usage_percent{job="monitor-agent"}) >= 90
+      - alert: HostHighDiskDanger
+        expr: monitor:disk_usage_percent:max >= 90
         for: 2m
         labels:
           severity: danger
           source: monitor-board
         annotations:
-          summary: "磁盘危险: {{ $labels.target }}"
-          description: "磁盘峰值占用 {{ $value | printf \"%.1f\" }}% >= 90%。"
+          summary: "Disk danger: {{ $labels.target }}"
+          description: "Disk max usage {{ $value | printf \"%.1f\" }}% >= 90%."
 
-      - alert: ServiceFailure
-        expr: monitor_service_failed_total{job="monitor-agent"} >= 1
+      - alert: HostServiceFailure
+        expr: monitor:service_failed_total:max >= 1
         for: 90s
         labels:
           severity: danger
           source: monitor-board
         annotations:
-          summary: "服务故障: {{ $labels.target }}"
-          description: "失败服务数 {{ $value | printf \"%.0f\" }} >= 1。"
+          summary: "Service failure: {{ $labels.target }}"
+          description: "Failed service count {{ $value | printf \"%.0f\" }} >= 1."

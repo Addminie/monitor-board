@@ -1,6 +1,6 @@
 param(
   [int]$Port = 9101,
-  [string]$AgentToken = "123456"
+  [string]$AgentToken = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,11 +33,31 @@ if (-not (Test-Path $workDir)) {
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $nodeExe = Resolve-NodeExe
-$command = "$env:AGENT_TOKEN='$AgentToken'; $env:PORT='$Port'; & '$nodeExe' 'server.js'"
+$tokenToUse = if ([string]::IsNullOrWhiteSpace($AgentToken)) { $env:AGENT_TOKEN } else { $AgentToken }
+if ([string]::IsNullOrWhiteSpace($tokenToUse)) {
+  throw "AGENT_TOKEN is empty. Set AGENT_TOKEN env var or pass -AgentToken."
+}
 
-Start-Process -FilePath "powershell.exe" `
-  -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-Command",$command `
-  -WorkingDirectory $workDir `
-  -WindowStyle Hidden `
-  -RedirectStandardOutput $stdoutLog `
-  -RedirectStandardError $stderrLog | Out-Null
+$previousAgentToken = $env:AGENT_TOKEN
+$previousPort = $env:PORT
+try {
+  $env:AGENT_TOKEN = $tokenToUse
+  $env:PORT = "$Port"
+  Start-Process -FilePath $nodeExe `
+    -ArgumentList "server.js" `
+    -WorkingDirectory $workDir `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $stdoutLog `
+    -RedirectStandardError $stderrLog | Out-Null
+} finally {
+  if ($null -eq $previousAgentToken) {
+    Remove-Item Env:AGENT_TOKEN -ErrorAction SilentlyContinue
+  } else {
+    $env:AGENT_TOKEN = $previousAgentToken
+  }
+  if ($null -eq $previousPort) {
+    Remove-Item Env:PORT -ErrorAction SilentlyContinue
+  } else {
+    $env:PORT = $previousPort
+  }
+}

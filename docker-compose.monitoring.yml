@@ -5,7 +5,8 @@ services:
     container_name: monitor-agent-local
     environment:
       PORT: "9101"
-      AGENT_TOKEN: "123456"
+      AGENT_TOKEN: "${AGENT_TOKEN:?AGENT_TOKEN is required, set it in .env}"
+      METRICS_TOKEN: "${METRICS_TOKEN:-}"
     ports:
       - "9101:9101"
     restart: unless-stopped
@@ -22,7 +23,19 @@ services:
       PORT: "9200"
       REQUEST_TIMEOUT_MS: "3000"
       ALERT_LOOP_ENABLED: "false"
+      STATE_DB_FILE: "/app/data/dashboard-state.db"
+      PROMETHEUS_HISTORY_ENABLED: "${PROMETHEUS_HISTORY_ENABLED:-true}"
+      PROMETHEUS_BASE_URL: "${PROMETHEUS_BASE_URL:-http://prometheus:9090}"
+      PROMETHEUS_QUERY_TIMEOUT_MS: "${PROMETHEUS_QUERY_TIMEOUT_MS:-10000}"
+      PROMETHEUS_TARGET_LABEL: "${PROMETHEUS_TARGET_LABEL:-target}"
+      API_PAGINATION_MAX: "${API_PAGINATION_MAX:-500}"
+      RBAC_ENABLED: "${RBAC_ENABLED:-false}"
+      RBAC_TOKEN_READONLY: "${RBAC_TOKEN_READONLY:-}"
+      RBAC_TOKEN_OPERATOR: "${RBAC_TOKEN_OPERATOR:-}"
+      RBAC_TOKEN_ADMIN: "${RBAC_TOKEN_ADMIN:-}"
     volumes:
+      - ./dashboard/data:/app/data
+      - ./dashboard/logs:/app/logs
       - ./dashboard/config/targets.docker.example.json:/app/config/targets.json:ro
       - ./dashboard/config/notifications.example.json:/app/config/notifications.json:ro
     ports:
@@ -41,6 +54,7 @@ services:
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - ./monitoring/prometheus/targets:/etc/prometheus/targets:ro
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
@@ -75,7 +89,10 @@ services:
       PORT: "9300"
       REQUEST_TIMEOUT_MS: "8000"
       NOTIFICATIONS_FILE: "/app/config/notifications.json"
+      STATE_DB_FILE: "/app/data/notify-bridge-state.db"
     volumes:
+      - ./notify-bridge/data:/app/data
+      - ./notify-bridge/logs:/app/logs
       - ./dashboard/config/notifications.example.json:/app/config/notifications.json:ro
     ports:
       - "9300:9300"
@@ -87,8 +104,8 @@ services:
     image: grafana/grafana:latest
     container_name: monitor-grafana
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required, set it in .env}"
       GF_USERS_DEFAULT_THEME: dark
       GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 5s
     volumes:

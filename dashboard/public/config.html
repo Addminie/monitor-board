@@ -154,9 +154,168 @@
         align-items: center;
         gap: 5px;
       }
+      .editor-toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .editor-select {
+        min-width: 240px;
+        background: #0c121b;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px;
+        font-size: 12px;
+      }
+      .editor-status {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .preview-output {
+        margin-top: 10px;
+        border: 1px solid var(--border);
+        background: #0b1018;
+        padding: 10px;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 260px;
+        overflow: auto;
+      }
+      .mini-output {
+        margin-top: 8px;
+        border: 1px solid var(--border);
+        background: #0b1018;
+        padding: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 180px;
+        overflow: auto;
+      }
+      .template-helper {
+        border: 1px dashed var(--border);
+        background: #0b1018;
+        padding: 10px;
+      }
+      .template-helper-title {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .template-var-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .template-var {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        background: #0c121b;
+        padding: 2px 6px;
+        color: var(--text);
+      }
+      .template-var code {
+        color: var(--accent);
+      }
+      .template-var-btn {
+        cursor: pointer;
+      }
+      .template-scope {
+        color: var(--muted);
+      }
+      .channel-template-box {
+        border: 1px solid var(--border);
+        background: #0b1018;
+        padding: 10px;
+      }
+      .subtle-note {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .template-playground {
+        border: 1px solid var(--border);
+        background: #0b1018;
+        padding: 10px;
+      }
+      .preview-textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        background: #0c121b;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+      .history-box {
+        margin-top: 8px;
+        border: 1px solid var(--border);
+        background: #0c121b;
+        padding: 8px;
+        max-height: 220px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .snippet-box {
+        margin-top: 8px;
+        border: 1px solid var(--border);
+        background: #0c121b;
+        padding: 8px;
+      }
+      .snippet-textarea {
+        width: 100%;
+        min-height: 120px;
+        resize: vertical;
+        background: #0b1018;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+      .guide-shell {
+        background: #0b1428;
+      }
+      .guide-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .guide-step-btn {
+        min-height: 30px;
+        padding: 4px 10px;
+      }
+      .guide-step-btn.is-active {
+        border-color: rgba(34, 211, 238, 0.8);
+        color: var(--accent);
+      }
+      .guide-hidden {
+        display: none !important;
+      }
+      .guide-summary {
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
       @media (max-width: 760px) {
         .config-grid {
           grid-template-columns: 1fr;
+        }
+        .editor-select {
+          min-width: 0;
+          width: 100%;
         }
       }
     </style>
@@ -173,10 +332,61 @@
       <section class="config-card">
         <div class="config-title">三步完成绑定</div>
         <ol class="tips">
-          <li>先在下方填写“绑定生成器”，点击“生成 JSON”。</li>
-          <li>把生成结果复制到 <code>dashboard/config/notifications.json</code>。</li>
-          <li>重启 dashboard，再用“测试发送（小白模式）”验证是否能收到通知。</li>
+          <li>优先用“可视化编辑现有 notifications.json”，加载后直接改，再点“保存到服务器”。</li>
+          <li>如果你是首次部署，也可以用“绑定生成器”快速生成一版 JSON。</li>
+          <li>最后用“测试发送（小白模式）”验证渠道是否能收到通知。</li>
         </ol>
+      </section>
+
+      <section class="config-card">
+        <div class="config-title">可视化编辑现有 notifications.json（推荐）</div>
+        <div class="step-note">
+          先点击“加载现有配置”，然后直接在下方表单编辑。支持多绑定、多渠道，最后点击“保存到服务器”。
+        </div>
+        <div class="editor-toolbar" style="margin-top: 8px;">
+          <button class="button" id="load-config-btn" type="button">加载现有配置</button>
+          <button class="button" id="save-config-btn" type="button">保存到服务器</button>
+          <button class="button" id="preview-diff-btn" type="button">预览变更</button>
+          <button class="button" id="dry-run-btn" type="button">校验配置（不保存）</button>
+          <span id="editor-status" class="editor-status">尚未加载</span>
+        </div>
+        <div class="config-grid" style="margin-top: 10px;">
+          <div>
+            <div class="field-label">绑定列表</div>
+            <div class="inline-actions">
+              <select id="editor-binding-select" class="editor-select"></select>
+              <button class="button" id="editor-binding-add-btn" type="button">新增绑定</button>
+              <button class="button" id="editor-binding-delete-btn" type="button">删除绑定</button>
+            </div>
+          </div>
+          <div>
+            <div class="field-label">渠道列表（当前绑定）</div>
+            <div class="inline-actions">
+              <select id="editor-channel-select" class="editor-select"></select>
+              <button class="button" id="editor-channel-add-btn" type="button">新增渠道</button>
+              <button class="button" id="editor-channel-delete-btn" type="button">删除渠道</button>
+            </div>
+          </div>
+        </div>
+        <div id="preview-output" class="preview-output">变更预览：尚未生成</div>
+        <div class="config-grid" style="margin-top: 10px;">
+          <div>
+            <div class="field-label">发布前检查</div>
+            <div class="inline-actions">
+              <button class="button" id="preflight-check-btn" type="button">一键发布前检查</button>
+            </div>
+            <div id="release-check-output" class="mini-output">尚未执行检查</div>
+          </div>
+          <div>
+            <div class="field-label">快速回滚（notifications 备份）</div>
+            <div class="inline-actions">
+              <button class="button" id="load-backups-btn" type="button">加载备份</button>
+              <select id="rollback-backup-select" class="editor-select"></select>
+              <button class="button" id="rollback-btn" type="button">回滚到所选备份</button>
+            </div>
+            <div id="backup-status-output" class="mini-output">尚未加载备份</div>
+          </div>
+        </div>
       </section>
 
       <section class="config-card">
@@ -265,6 +475,278 @@
               </div>
               <div class="checkbox-group">
                 <label class="checkbox-item"><input id="notify-recover" type="checkbox" checked />发送恢复通知</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-grid">
+            <div>
+              <div class="field-label label-with-help">
+                <span>消息语言预设</span>
+                <span class="help-tip" data-tip="选择默认通知文案语言。你也可以下方填写自定义模板。">?</span>
+              </div>
+              <select id="message-locale">
+                <option value="zh-CN">中文（zh-CN）</option>
+                <option value="en-US">English（en-US）</option>
+              </select>
+            </div>
+            <div class="inline-actions" style="align-items:flex-end;">
+              <button class="button" id="apply-template-preset-btn" type="button">填充语言预设模板</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="field-label label-with-help">
+              <span>自定义消息模板（可选）</span>
+              <span class="help-tip" data-tip="可用变量：{{titlePrefix}} {{bindingName}} {{targetName}} {{targetUrl}} {{severity}} {{previousSeverity}} {{escalationLevel}} {{unackedSec}} {{reasons}} {{metrics}} {{timestamp}}">?</span>
+            </div>
+            <div class="config-grid">
+              <div>
+                <div class="field-label">告警模板（alert）</div>
+                <textarea id="tpl-alert" placeholder="留空使用语言预设"></textarea>
+              </div>
+              <div>
+                <div class="field-label">恢复模板（recover）</div>
+                <textarea id="tpl-recover" placeholder="留空使用语言预设"></textarea>
+              </div>
+              <div>
+                <div class="field-label">升级模板（escalate）</div>
+                <textarea id="tpl-escalate" placeholder="留空使用语言预设"></textarea>
+              </div>
+              <div>
+                <div class="field-label">测试模板（test）</div>
+                <textarea id="tpl-test" placeholder="留空使用语言预设"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="template-helper">
+            <div class="template-helper-title">模板变量速查（可直接粘贴到模板中）</div>
+            <div class="template-var-list">
+              <button class="template-var template-var-btn" type="button" data-template-var="{{titlePrefix}}"><code>{{titlePrefix}}</code><span class="template-scope">标题前缀</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{bindingName}}"><code>{{bindingName}}</code><span class="template-scope">绑定名</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{targetName}}"><code>{{targetName}}</code><span class="template-scope">目标名</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{targetUrl}}"><code>{{targetUrl}}</code><span class="template-scope">目标地址</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{severity}}"><code>{{severity}}</code><span class="template-scope">当前级别</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{previousSeverity}}"><code>{{previousSeverity}}</code><span class="template-scope">恢复前级别</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{escalationLevel}}"><code>{{escalationLevel}}</code><span class="template-scope">升级次数</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{unackedSec}}"><code>{{unackedSec}}</code><span class="template-scope">未确认秒数</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{reasons}}"><code>{{reasons}}</code><span class="template-scope">触发原因</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{metrics}}"><code>{{metrics}}</code><span class="template-scope">关键指标</span></button>
+              <button class="template-var template-var-btn" type="button" data-template-var="{{timestamp}}"><code>{{timestamp}}</code><span class="template-scope">时间戳</span></button>
+            </div>
+            <div id="template-var-copy-status" class="subtle-note" style="margin-top: 6px;">点击变量即可一键复制</div>
+          </div>
+
+          <div class="snippet-box">
+            <div class="field-label label-with-help">
+              <span>模板片段导入 / 导出</span>
+              <span class="help-tip" data-tip="可导出当前绑定模板或当前渠道模板片段，复制到其他绑定复用；也可粘贴 JSON 片段一键导入。">?</span>
+            </div>
+            <div class="inline-actions">
+              <button class="button" id="export-binding-template-snippet-btn" type="button">导出绑定模板片段</button>
+              <button class="button" id="export-channel-template-snippet-btn" type="button">导出当前渠道模板片段</button>
+              <button class="button" id="import-template-snippet-btn" type="button">导入模板片段</button>
+            </div>
+            <textarea id="template-snippet-json" class="snippet-textarea" placeholder='在此查看或粘贴模板片段 JSON，例如：{"scope":"binding","messageLocale":"zh-CN","messageTemplates":{"alert":"..."}}'></textarea>
+            <div id="template-snippet-status" class="subtle-note">尚未执行导入/导出</div>
+          </div>
+
+          <div class="channel-template-box">
+            <div class="field-label label-with-help">
+              <span>当前渠道单独模板（可选）</span>
+              <span class="help-tip" data-tip="仅作用于“当前选中的渠道”。适合同一绑定下，不同渠道使用不同文案语言或格式。">?</span>
+            </div>
+            <div class="checkbox-group">
+              <label class="checkbox-item">
+                <input id="channel-template-enabled" type="checkbox" />
+                为当前渠道启用单独模板
+              </label>
+              <span class="subtle-note">不勾选则继承绑定默认模板</span>
+            </div>
+            <div id="channel-template-fields" class="hidden" style="margin-top: 8px;">
+              <div class="config-grid">
+                <div>
+                  <div class="field-label">当前渠道模板语言</div>
+                  <select id="channel-message-locale">
+                    <option value="zh-CN">中文（zh-CN）</option>
+                    <option value="en-US">English（en-US）</option>
+                  </select>
+                </div>
+                <div class="inline-actions" style="align-items:flex-end;">
+                  <button class="button" id="apply-channel-template-preset-btn" type="button">填充当前渠道语言模板</button>
+                </div>
+              </div>
+              <div class="config-grid" style="margin-top: 8px;">
+                <div>
+                  <div class="field-label">渠道告警模板（alert）</div>
+                  <textarea id="channel-tpl-alert" placeholder="留空使用当前渠道语言预设"></textarea>
+                </div>
+                <div>
+                  <div class="field-label">渠道恢复模板（recover）</div>
+                  <textarea id="channel-tpl-recover" placeholder="留空使用当前渠道语言预设"></textarea>
+                </div>
+                <div>
+                  <div class="field-label">渠道升级模板（escalate）</div>
+                  <textarea id="channel-tpl-escalate" placeholder="留空使用当前渠道语言预设"></textarea>
+                </div>
+                <div>
+                  <div class="field-label">渠道测试模板（test）</div>
+                  <textarea id="channel-tpl-test" placeholder="留空使用当前渠道语言预设"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="template-playground">
+            <div class="field-label label-with-help">
+              <span>模板预览沙箱（不发送真实通知）</span>
+              <span class="help-tip" data-tip="在这里输入示例参数，点击“生成预览消息”，可以先验证模板效果，再去执行测试发送。">?</span>
+            </div>
+            <div class="config-grid">
+              <div>
+                <div class="field-label">预览模板来源</div>
+                <select id="template-preview-scope">
+                  <option value="binding">绑定默认模板</option>
+                  <option value="channel">当前渠道模板（若已启用）</option>
+                </select>
+              </div>
+              <div>
+                <div class="field-label">事件类型</div>
+                <select id="template-preview-event">
+                  <option value="alert">alert（告警）</option>
+                  <option value="recover">recover（恢复）</option>
+                  <option value="escalate">escalate（升级）</option>
+                  <option value="test">test（测试）</option>
+                </select>
+              </div>
+            </div>
+            <div class="config-grid" style="margin-top: 8px;">
+              <div>
+                <div class="field-label">绑定名称</div>
+                <input id="template-preview-binding" value="ops-all" />
+              </div>
+              <div>
+                <div class="field-label">目标名称</div>
+                <input id="template-preview-target" value="preview-target" />
+              </div>
+              <div>
+                <div class="field-label">目标地址</div>
+                <input id="template-preview-url" value="http://127.0.0.1:9101" />
+              </div>
+              <div>
+                <div class="field-label">当前级别</div>
+                <select id="template-preview-severity">
+                  <option value="danger">danger</option>
+                  <option value="offline">offline</option>
+                  <option value="warn">warn</option>
+                  <option value="ok">ok</option>
+                </select>
+              </div>
+            </div>
+            <div class="config-grid" style="margin-top: 8px;">
+              <div>
+                <div class="field-label">恢复前级别（recover 用）</div>
+                <select id="template-preview-prev-severity">
+                  <option value="danger">danger</option>
+                  <option value="offline">offline</option>
+                  <option value="warn">warn</option>
+                  <option value="ok">ok</option>
+                </select>
+              </div>
+              <div>
+                <div class="field-label">升级等级（escalate 用）</div>
+                <input id="template-preview-level" type="number" min="1" value="1" />
+              </div>
+              <div>
+                <div class="field-label">未确认秒数（escalate 用）</div>
+                <input id="template-preview-unacked-sec" type="number" min="0" value="900" />
+              </div>
+              <div>
+                <div class="field-label">故障服务数（可选）</div>
+                <input id="template-preview-failed-services" type="number" min="0" value="2" />
+              </div>
+            </div>
+            <div class="config-grid" style="margin-top: 8px;">
+              <div>
+                <div class="field-label">CPU %（可选）</div>
+                <input id="template-preview-cpu" type="number" min="0" max="100" step="0.1" value="93.5" />
+              </div>
+              <div>
+                <div class="field-label">内存 %（可选）</div>
+                <input id="template-preview-mem" type="number" min="0" max="100" step="0.1" value="88.1" />
+              </div>
+              <div>
+                <div class="field-label">磁盘 %（可选）</div>
+                <input id="template-preview-disk" type="number" min="0" max="100" step="0.1" value="91.2" />
+              </div>
+              <div class="inline-actions" style="align-items:flex-end;">
+                <button class="button" id="template-preview-render-btn" type="button">生成预览消息</button>
+              </div>
+            </div>
+            <div style="margin-top: 8px;">
+              <div class="field-label">触发原因（每行一条）</div>
+              <textarea id="template-preview-reasons" placeholder="CPU > 95%\ndisk usage > 90%">CPU > 95%
+service check failed</textarea>
+            </div>
+            <div style="margin-top: 8px;">
+              <div id="template-preview-meta" class="subtle-note">尚未生成预览</div>
+              <textarea id="template-preview-output" class="preview-textarea" readonly></textarea>
+            </div>
+            <div style="margin-top: 8px;">
+              <div class="inline-actions" style="justify-content: space-between; align-items: center;">
+                <div class="field-label">预览历史（最近 20 条）</div>
+                <button class="button" id="template-preview-history-clear-btn" type="button">清空预览历史</button>
+              </div>
+              <div id="template-preview-history" class="history-box">暂无预览历史</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="field-label label-with-help">
+              <span>升级通知（可选）</span>
+              <span class="help-tip" data-tip="故障长期未恢复时自动发送“升级告警”。适合值班场景，建议仅用于 danger/offline。">?</span>
+            </div>
+            <div class="checkbox-group">
+              <label class="checkbox-item">
+                <input id="escalate-enabled" type="checkbox" />
+                启用升级通知
+              </label>
+            </div>
+          </div>
+
+          <div id="escalation-fields" class="config-grid hidden">
+            <div>
+              <div class="field-label label-with-help">
+                <span>首次升级等待秒数</span>
+                <span class="help-tip" data-tip="从首次告警开始计时，到达该时间仍未恢复/未确认，就触发第 1 次升级告警。建议 900~3600 秒。">?</span>
+              </div>
+              <input id="escalate-after-sec" type="number" min="1" value="1800" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>升级间隔秒数</span>
+                <span class="help-tip" data-tip="第 1 次升级后，后续升级按该间隔重复发送。建议不小于 300 秒。">?</span>
+              </div>
+              <input id="escalate-interval-sec" type="number" min="60" value="1800" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>最大升级次数（0=不限）</span>
+                <span class="help-tip" data-tip="限制升级消息总次数。0 表示不限制，建议 3~5 次。">?</span>
+              </div>
+              <input id="escalate-max-times" type="number" min="0" value="3" />
+            </div>
+            <div style="grid-column: 1 / -1">
+              <div class="field-label label-with-help">
+                <span>升级订阅级别</span>
+                <span class="help-tip" data-tip="建议只勾选 danger/offline。warn 较多时可能造成升级噪音。">?</span>
+              </div>
+              <div class="checkbox-group">
+                <label class="checkbox-item"><input class="sev-escalate" type="checkbox" value="warn" />warn</label>
+                <label class="checkbox-item"><input class="sev-escalate" type="checkbox" value="danger" checked />danger</label>
+                <label class="checkbox-item"><input class="sev-escalate" type="checkbox" value="offline" checked />offline</label>
+                <label class="checkbox-item"><input class="sev-escalate" type="checkbox" value="all" />all</label>
               </div>
             </div>
           </div>
@@ -406,6 +888,31 @@
             </div>
             <div class="inline-actions" style="align-items:flex-end;">
               <button id="sync-binding-btn" class="button" type="button">使用当前绑定名</button>
+              <button id="test-easy-fill-btn" class="button" type="button">一键填推荐值</button>
+            </div>
+          </div>
+
+          <div class="config-grid">
+            <div>
+              <div class="field-label label-with-help">
+                <span>测试渠道范围</span>
+                <span class="help-tip" data-tip="可选测试全部渠道、仅当前渠道，或手动指定渠道名。">?</span>
+              </div>
+              <select id="test-channel-mode">
+                <option value="all">全部渠道</option>
+                <option value="current">仅当前渠道</option>
+                <option value="custom">手动指定渠道名</option>
+              </select>
+            </div>
+            <div id="test-channel-custom-block" class="hidden">
+              <div class="field-label label-with-help">
+                <span>渠道名称（手动）</span>
+                <span class="help-tip" data-tip="填通知配置里的 channels[].name。">?</span>
+              </div>
+              <div class="inline-actions">
+                <input id="test-channel-name" placeholder="例如: ops-channel" />
+                <button id="sync-channel-btn" class="button" type="button">使用当前渠道名</button>
+              </div>
             </div>
           </div>
 
@@ -447,174 +954,6 @@
       </section>
     </main>
 
-    <script>
-      function get(id) {
-        return document.getElementById(id);
-      }
-
-      function splitList(input) {
-        return String(input || "")
-          .split(/[\n,]/)
-          .map((item) => item.trim())
-          .filter(Boolean);
-      }
-
-      function toggleFields() {
-        const type = get("channel-type").value;
-        get("wechat-fields").classList.toggle("hidden", type !== "wechat");
-        get("telegram-fields").classList.toggle("hidden", type !== "telegram");
-        get("dingtalk-fields").classList.toggle("hidden", type !== "dingtalk");
-      }
-
-      function toggleTestScope() {
-        const checked = document.querySelector("input[name='test-scope']:checked");
-        const isAll = checked && checked.value === "all";
-        get("test-binding-block").classList.toggle("hidden", isAll);
-        if (isAll) get("test-binding").value = "";
-      }
-
-      function buildChannel() {
-        const type = get("channel-type").value;
-        const name = get("channel-name").value.trim() || "ops-channel";
-
-        if (type === "wechat") {
-          const webhook = get("wechat-webhook").value.trim();
-          if (!webhook) throw new Error("企业微信 webhook 不能为空");
-          return {
-            type: "wechat",
-            name,
-            webhook,
-            mentionedMobileList: splitList(get("wechat-mobiles").value),
-            mentionedList: splitList(get("wechat-users").value),
-          };
-        }
-
-        if (type === "telegram") {
-          const botToken = get("tg-token").value.trim();
-          const chatId = get("tg-chat-id").value.trim();
-          if (!botToken || !chatId) throw new Error("Telegram botToken/chatId 不能为空");
-          const topicId = get("tg-topic-id").value.trim();
-          return {
-            type: "telegram",
-            name,
-            botToken,
-            chatId,
-            ...(topicId ? { topicId } : {}),
-          };
-        }
-
-        const webhook = get("dt-webhook").value.trim();
-        if (!webhook) throw new Error("钉钉 webhook 不能为空");
-        const secret = get("dt-secret").value.trim();
-        return {
-          type: "dingtalk",
-          name,
-          webhook,
-          ...(secret ? { secret } : {}),
-          atMobiles: splitList(get("dt-mobiles").value),
-          isAtAll: get("dt-at-all").checked,
-        };
-      }
-
-      function getSeverities() {
-        const values = Array.from(document.querySelectorAll(".sev:checked")).map(
-          (node) => node.value
-        );
-        return values.length ? values : ["danger", "offline"];
-      }
-
-      function buildNotificationsJson() {
-        const bindingName = get("binding-name").value.trim() || "ops-all";
-        const cooldownSec = Number(get("cooldown-sec").value || 300);
-        const remindIntervalSec = Number(get("remind-sec").value || 0);
-        return {
-          enabled: true,
-          cooldownSec: Math.max(0, cooldownSec),
-          remindIntervalSec: Math.max(0, remindIntervalSec),
-          bindings: [
-            {
-              name: bindingName,
-              enabled: true,
-              targets: splitList(get("targets").value).length
-                ? splitList(get("targets").value)
-                : ["*"],
-              severities: getSeverities(),
-              notifyRecover: get("notify-recover").checked,
-              channels: [buildChannel()],
-            },
-          ],
-        };
-      }
-
-      function showJson() {
-        const output = get("json-output");
-        const data = buildNotificationsJson();
-        output.value = JSON.stringify(data, null, 2);
-      }
-
-      async function copyOutput() {
-        const output = get("json-output").value.trim();
-        if (!output) {
-          alert("请先点击“生成 JSON”");
-          return;
-        }
-        try {
-          await navigator.clipboard.writeText(output);
-          alert("已复制，可直接粘贴到 notifications.json");
-        } catch {
-          alert("复制失败，请手动复制文本框内容");
-        }
-      }
-
-      get("channel-type").addEventListener("change", toggleFields);
-      get("builder-form").addEventListener("submit", (event) => {
-        event.preventDefault();
-        try {
-          showJson();
-        } catch (error) {
-          alert(error.message || String(error));
-        }
-      });
-      get("copy-btn").addEventListener("click", copyOutput);
-      get("sync-binding-btn").addEventListener("click", () => {
-        get("test-binding").value = get("binding-name").value.trim();
-      });
-
-      document.querySelectorAll("input[name='test-scope']").forEach((item) => {
-        item.addEventListener("change", toggleTestScope);
-      });
-
-      toggleFields();
-      toggleTestScope();
-
-      const form = get("test-form");
-      const result = get("result");
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        result.textContent = "发送中...";
-        const scope = (document.querySelector("input[name='test-scope']:checked") || {}).value;
-        const payload = {
-          binding: scope === "all" ? "" : get("test-binding").value.trim(),
-          target: get("test-target").value.trim() || "manual-test",
-          severity: get("test-severity").value,
-          message: get("test-message").value.trim(),
-        };
-        try {
-          const res = await fetch("/api/alerts/test", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          const data = await res.json().catch(() => ({}));
-          result.textContent = JSON.stringify(
-            { ok: res.ok, status: res.status, data },
-            null,
-            2
-          );
-        } catch (error) {
-          result.textContent = String(error?.message || error);
-        }
-      });
-    </script>
+        <script src="/config-page.js"></script>
   </body>
 </html>

@@ -5,7 +5,8 @@ services:
     container_name: monitor-agent-local
     environment:
       PORT: "9101"
-      AGENT_TOKEN: "123456"
+      AGENT_TOKEN: "${AGENT_TOKEN:?AGENT_TOKEN is required, set it in .env}"
+      METRICS_TOKEN: "${METRICS_TOKEN:-}"
     ports:
       - "9101:9101"
     restart: unless-stopped
@@ -21,7 +22,15 @@ services:
     environment:
       PORT: "9200"
       REQUEST_TIMEOUT_MS: "3000"
+      STATE_DB_FILE: "/app/data/dashboard-state.db"
+      API_PAGINATION_MAX: "${API_PAGINATION_MAX:-500}"
+      RBAC_ENABLED: "${RBAC_ENABLED:-false}"
+      RBAC_TOKEN_READONLY: "${RBAC_TOKEN_READONLY:-}"
+      RBAC_TOKEN_OPERATOR: "${RBAC_TOKEN_OPERATOR:-}"
+      RBAC_TOKEN_ADMIN: "${RBAC_TOKEN_ADMIN:-}"
     volumes:
+      - ./dashboard/data:/app/data
+      - ./dashboard/logs:/app/logs
       - ./dashboard/config/targets.docker.example.json:/app/config/targets.json:ro
       - ./dashboard/config/notifications.example.json:/app/config/notifications.json:ro
     ports:

@@ -32,11 +32,19 @@ if (-not (Test-Path $workDir)) {
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $nodeExe = Resolve-NodeExe
-$command = "$env:PORT='$Port'; & '$nodeExe' 'server.js'"
-
-Start-Process -FilePath "powershell.exe" `
-  -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-Command",$command `
-  -WorkingDirectory $workDir `
-  -WindowStyle Hidden `
-  -RedirectStandardOutput $stdoutLog `
-  -RedirectStandardError $stderrLog | Out-Null
+$previousPort = $env:PORT
+try {
+  $env:PORT = "$Port"
+  Start-Process -FilePath $nodeExe `
+    -ArgumentList "server.js" `
+    -WorkingDirectory $workDir `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $stdoutLog `
+    -RedirectStandardError $stderrLog | Out-Null
+} finally {
+  if ($null -eq $previousPort) {
+    Remove-Item Env:PORT -ErrorAction SilentlyContinue
+  } else {
+    $env:PORT = $previousPort
+  }
+}

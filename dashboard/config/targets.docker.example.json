@@ -2,6 +2,6 @@
   {
     "name": "agent-local",
     "url": "http://agent-local:9101",
-    "token": "123456"
+    "token": "replace_with_agent_token"
   }
 ]

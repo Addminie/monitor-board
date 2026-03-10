@@ -1,5 +1,6 @@
 const express = require("express");
 const fs = require("fs");
+const path = require("path");
 const crypto = require("crypto");
 
 const PORT = Number(process.env.PORT || 9300);
@@ -8,6 +9,23 @@ const NOTIFICATIONS_FILE = String(
   process.env.NOTIFICATIONS_FILE || "/app/config/notifications.json"
 ).trim();
 const STATE_TTL_MS = Number(process.env.STATE_TTL_MS || 7 * 24 * 3600 * 1000);
+const STARTED_AT = Date.now();
+const SERVICE_NAME = "monitor-notify-bridge";
+const EXIT_ON_UNCAUGHT_EXCEPTION =
+  String(process.env.EXIT_ON_UNCAUGHT_EXCEPTION || "false").toLowerCase() === "true";
+const NOTIFY_RETRY_COUNT = Math.max(0, Math.floor(Number(process.env.NOTIFY_RETRY_COUNT || 2) || 0));
+const NOTIFY_RETRY_BACKOFF_MS = Math.max(
+  200,
+  Math.floor(Number(process.env.NOTIFY_RETRY_BACKOFF_MS || 1000) || 1000)
+);
+const DEADLETTER_FILE = String(
+  process.env.DEADLETTER_FILE || path.join(__dirname, "logs", "notify-bridge-deadletter.jsonl")
+).trim();
+const STATE_PERSIST_ENABLED = String(process.env.STATE_PERSIST_ENABLED || "true") !== "false";
+const STATE_DB_FILE = String(
+  process.env.STATE_DB_FILE || path.join(__dirname, "data", "notify-bridge-state.db")
+).trim();
+const API_VERSION = "v1";
 
 const DEFAULT_NOTIFICATIONS = {
   enabled: false,
@@ -24,9 +42,213 @@ const SEVERITY_RANK = {
 };
 
 const stateByBindingAlert = new Map();
+const dispatchQueue = [];
+let dispatchWorkerRunning = false;
+let stateStore = {
+  enabled: false,
+  reason: "not_initialized",
+  backend: "none",
+  dbFile: STATE_DB_FILE,
+  loadStmt: null,
+  upsertStmt: null,
+  deleteStmt: null,
+  db: null,
+};
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function serializeError(error) {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  return String(error.stack || error.message || error);
+}
+
+function logEvent(level, event, details = {}) {
+  const payload = {
+    ts: nowIso(),
+    level,
+    service: SERVICE_NAME,
+    event,
+    ...details,
+  };
+  const line = JSON.stringify(payload);
+  if (level === "error" || level === "fatal") {
+    console.error(line);
+    return;
+  }
+  console.log(line);
+}
+
+function sendApiError(res, status, code, message, details = null) {
+  const errorPayload = {
+    code: String(code || "INTERNAL_ERROR"),
+    message: String(message || "request failed"),
+  };
+  if (details && typeof details === "object") {
+    errorPayload.details = details;
+  }
+  return res.status(status).json({
+    message: errorPayload.message,
+    error: errorPayload,
+  });
+}
+
+function installProcessGuards() {
+  process.on("unhandledRejection", (reason) => {
+    logEvent("error", "process.unhandled_rejection", { error: serializeError(reason) });
+  });
+  process.on("uncaughtException", (error) => {
+    logEvent("fatal", "process.uncaught_exception", { error: serializeError(error) });
+    if (EXIT_ON_UNCAUGHT_EXCEPTION) {
+      setTimeout(() => process.exit(1), 200).unref();
+    }
+  });
+}
+
+function initStateStore() {
+  if (!STATE_PERSIST_ENABLED) {
+    stateStore = {
+      enabled: false,
+      reason: "disabled_by_env",
+      backend: "none",
+      dbFile: STATE_DB_FILE,
+      loadStmt: null,
+      upsertStmt: null,
+      deleteStmt: null,
+      db: null,
+    };
+    logEvent("info", "state_store.disabled", { dbFile: STATE_DB_FILE });
+    return;
+  }
+  try {
+    const { DatabaseSync } = require("node:sqlite");
+    const dir = path.dirname(STATE_DB_FILE);
+    fs.mkdirSync(dir, { recursive: true });
+    const db = new DatabaseSync(STATE_DB_FILE);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS notify_bridge_state (
+        map_key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    const loadStmt = db.prepare(`
+      SELECT map_key AS mapKey, value_json AS valueJson
+      FROM notify_bridge_state
+    `);
+    const upsertStmt = db.prepare(`
+      INSERT INTO notify_bridge_state (map_key, value_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(map_key) DO UPDATE SET
+        value_json = excluded.value_json,
+        updated_at = excluded.updated_at
+    `);
+    const deleteStmt = db.prepare(`
+      DELETE FROM notify_bridge_state WHERE map_key = ?
+    `);
+    stateStore = {
+      enabled: true,
+      reason: "ok",
+      backend: "sqlite",
+      dbFile: STATE_DB_FILE,
+      loadStmt,
+      upsertStmt,
+      deleteStmt,
+      db,
+    };
+    logEvent("info", "state_store.ready", {
+      backend: stateStore.backend,
+      dbFile: stateStore.dbFile,
+    });
+  } catch (error) {
+    stateStore = {
+      enabled: false,
+      reason: serializeError(error),
+      backend: "none",
+      dbFile: STATE_DB_FILE,
+      loadStmt: null,
+      upsertStmt: null,
+      deleteStmt: null,
+      db: null,
+    };
+    logEvent("error", "state_store.init_failed", {
+      dbFile: STATE_DB_FILE,
+      error: serializeError(error),
+    });
+  }
+}
+
+function closeStateStore() {
+  if (!stateStore.enabled || !stateStore.db) return;
+  try {
+    stateStore.db.close();
+  } catch (_error) {}
+}
+
+function persistStateEntry(mapKey, value) {
+  if (!stateStore.enabled || !stateStore.upsertStmt) return;
+  try {
+    stateStore.upsertStmt.run(mapKey, JSON.stringify(value), nowIso());
+  } catch (error) {
+    logEvent("error", "state_store.persist_failed", {
+      mapKey,
+      error: serializeError(error),
+    });
+  }
+}
+
+function removeStateEntry(mapKey) {
+  if (!stateStore.enabled || !stateStore.deleteStmt) return;
+  try {
+    stateStore.deleteStmt.run(mapKey);
+  } catch (error) {
+    logEvent("error", "state_store.delete_failed", {
+      mapKey,
+      error: serializeError(error),
+    });
+  }
+}
+
+function setBindingAlertState(mapKey, value) {
+  stateByBindingAlert.set(mapKey, value);
+  persistStateEntry(mapKey, value);
+}
+
+function deleteBindingAlertState(mapKey) {
+  stateByBindingAlert.delete(mapKey);
+  removeStateEntry(mapKey);
+}
+
+function restoreStateFromStore() {
+  if (!stateStore.enabled || !stateStore.loadStmt) return;
+  try {
+    const rows = stateStore.loadStmt.all();
+    let count = 0;
+    rows.forEach((row) => {
+      const key = String(row?.mapKey || "");
+      if (!key) return;
+      let value;
+      try {
+        value = JSON.parse(String(row?.valueJson || "null"));
+      } catch (_error) {
+        return;
+      }
+      if (!value || typeof value !== "object") return;
+      stateByBindingAlert.set(key, value);
+      count += 1;
+    });
+    logEvent("info", "state_store.restored", {
+      stateEntries: count,
+      dbFile: stateStore.dbFile,
+    });
+  } catch (error) {
+    logEvent("error", "state_store.restore_failed", {
+      dbFile: stateStore.dbFile,
+      error: serializeError(error),
+    });
+  }
 }
 
 function readJsonFileIfExists(filePath) {
@@ -90,6 +312,39 @@ function normalizeChannel(channel) {
   return null;
 }
 
+function normalizeBindingSilence(input, index) {
+  if (!input || typeof input !== "object") return null;
+  if (input.enabled === false) return null;
+
+  const endRaw = String(input.endAt || input.end || "").trim();
+  if (!endRaw) return null;
+  const endMs = Date.parse(endRaw);
+  if (!Number.isFinite(endMs)) return null;
+
+  const startRaw = String(input.startAt || input.start || "").trim();
+  const startMs = startRaw ? Date.parse(startRaw) : null;
+  if (startRaw && !Number.isFinite(startMs)) return null;
+  if (Number.isFinite(startMs) && endMs <= startMs) return null;
+
+  const targetsRaw = Array.isArray(input.targets) ? input.targets : ["*"];
+  const targets = targetsRaw.map((item) => String(item).trim()).filter(Boolean);
+  const severitiesRaw = Array.isArray(input.severities) ? input.severities : ["all"];
+  const severities = severitiesRaw
+    .map((item) => String(item).trim().toLowerCase())
+    .filter((item) => ["all", "offline", "danger", "warn"].includes(item));
+
+  return {
+    id: String(input.id || `silence-${index + 1}`),
+    name: String(input.name || `silence-${index + 1}`),
+    startAt: Number.isFinite(startMs) ? new Date(startMs).toISOString() : "",
+    endAt: new Date(endMs).toISOString(),
+    startMs: Number.isFinite(startMs) ? startMs : null,
+    endMs,
+    targets: targets.length ? targets : ["*"],
+    severities: severities.length ? severities : ["all"],
+  };
+}
+
 function normalizeBinding(binding, index, defaults) {
   if (!binding || typeof binding !== "object") return null;
   if (binding.enabled === false) return null;
@@ -110,6 +365,20 @@ function normalizeBinding(binding, index, defaults) {
 
   const cooldownSecRaw = Number(binding.cooldownSec);
   const remindSecRaw = Number(binding.remindIntervalSec);
+  const silenceItems = Array.isArray(binding.silences) ? binding.silences : [];
+  if (binding.silenceUntil != null) {
+    silenceItems.push({
+      name: "silenceUntil",
+      endAt: binding.silenceUntil,
+      targets: Array.isArray(binding.silenceTargets) ? binding.silenceTargets : ["*"],
+      severities: Array.isArray(binding.silenceSeverities)
+        ? binding.silenceSeverities
+        : ["all"],
+    });
+  }
+  const silences = silenceItems
+    .map((item, silenceIndex) => normalizeBindingSilence(item, silenceIndex))
+    .filter(Boolean);
 
   return {
     id: `${name}#${index}`,
@@ -126,6 +395,7 @@ function normalizeBinding(binding, index, defaults) {
         ? Math.floor(remindSecRaw)
         : defaults.remindIntervalSec,
     channels,
+    silences,
   };
 }
 
@@ -172,13 +442,46 @@ function loadNotifications() {
   return normalizeNotifications(DEFAULT_NOTIFICATIONS);
 }
 
+function checkNotificationsConfigReady() {
+  const env = String(process.env.MONITOR_NOTIFICATIONS || "").trim();
+  if (env) {
+    try {
+      JSON.parse(env);
+      return { ok: true, source: "env", detail: "MONITOR_NOTIFICATIONS" };
+    } catch (error) {
+      return {
+        ok: false,
+        source: "env",
+        detail: "MONITOR_NOTIFICATIONS",
+        message: error?.message || "invalid MONITOR_NOTIFICATIONS",
+      };
+    }
+  }
+
+  if (fs.existsSync(NOTIFICATIONS_FILE)) {
+    try {
+      JSON.parse(fs.readFileSync(NOTIFICATIONS_FILE, "utf8"));
+      return { ok: true, source: "file", detail: NOTIFICATIONS_FILE };
+    } catch (error) {
+      return {
+        ok: false,
+        source: "file",
+        detail: NOTIFICATIONS_FILE,
+        message: error?.message || "invalid notifications file",
+      };
+    }
+  }
+
+  return { ok: true, source: "default", detail: "built-in defaults" };
+}
+
 function wildcardToRegExp(pattern) {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
   return new RegExp(`^${escaped}$`, "i");
 }
 
-function bindingMatchesTarget(binding, event) {
-  const candidateValues = [
+function eventCandidateValues(event) {
+  return [
     event.target,
     event.instance,
     event.url,
@@ -186,8 +489,10 @@ function bindingMatchesTarget(binding, event) {
   ]
     .map((item) => String(item || "").trim())
     .filter(Boolean);
+}
 
-  return binding.targets.some((pattern) => {
+function matchesCandidatePatterns(candidateValues, patterns) {
+  return patterns.some((pattern) => {
     const normalized = String(pattern || "").trim();
     if (!normalized || normalized === "*") return true;
 
@@ -199,6 +504,39 @@ function bindingMatchesTarget(binding, event) {
     const re = wildcardToRegExp(normalized);
     return candidateValues.some((candidate) => re.test(candidate));
   });
+}
+
+function bindingMatchesTarget(binding, event) {
+  const candidateValues = eventCandidateValues(event);
+  return matchesCandidatePatterns(candidateValues, binding.targets);
+}
+
+function isSilenceWindowActive(silence, timestampMs) {
+  if (!silence) return false;
+  if (silence.startMs != null && timestampMs < silence.startMs) return false;
+  return timestampMs <= silence.endMs;
+}
+
+function shouldSilenceSeverity(silence, severity) {
+  if (!silence) return false;
+  if (silence.severities.includes("all")) return true;
+  return silence.severities.includes(severity);
+}
+
+function getBindingSilence(binding, event, severity, timestampMs = Date.now()) {
+  const candidateValues = eventCandidateValues(event);
+  const silences = Array.isArray(binding?.silences) ? binding.silences : [];
+  for (const silence of silences) {
+    if (!isSilenceWindowActive(silence, timestampMs)) continue;
+    if (!shouldSilenceSeverity(silence, severity)) continue;
+    if (!matchesCandidatePatterns(candidateValues, silence.targets)) continue;
+    return {
+      silenced: true,
+      name: silence.name || silence.id || "silence-window",
+      endAt: silence.endAt || "",
+    };
+  }
+  return { silenced: false, name: "", endAt: "" };
 }
 
 function normalizeSeverity(value) {
@@ -383,23 +721,103 @@ async function sendToChannel(channel, message) {
   throw new Error(`unsupported channel type: ${channel.type}`);
 }
 
-async function dispatchMessage(binding, message) {
-  const results = [];
-  for (const channel of binding.channels) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function appendDeadLetter(entry) {
+  try {
+    const line = `${JSON.stringify(entry)}\n`;
+    fs.mkdirSync(path.dirname(DEADLETTER_FILE), { recursive: true });
+    fs.appendFileSync(DEADLETTER_FILE, line, "utf8");
+  } catch (error) {
+    logEvent("error", "dead_letter.write_failed", {
+      file: DEADLETTER_FILE,
+      error: serializeError(error),
+    });
+  }
+}
+
+async function sendToChannelWithRetry(channel, message) {
+  let attempt = 0;
+  let lastError = null;
+  while (attempt <= NOTIFY_RETRY_COUNT) {
+    attempt += 1;
     try {
       await sendToChannel(channel, message);
-      results.push({ channel: channel.name, type: channel.type, ok: true, error: null });
+      return { ok: true, attempts: attempt, error: null };
     } catch (error) {
-      results.push({
+      lastError = error;
+      if (attempt > NOTIFY_RETRY_COUNT) break;
+      const delay = NOTIFY_RETRY_BACKOFF_MS * Math.pow(2, attempt - 1);
+      await sleep(delay);
+    }
+  }
+  return {
+    ok: false,
+    attempts: attempt,
+    error: lastError?.message || "send failed",
+  };
+}
+
+async function dispatchMessage(binding, message, meta = {}) {
+  const results = [];
+  for (const channel of binding.channels) {
+    const sendResult = await sendToChannelWithRetry(channel, message);
+    const row = {
+      channel: channel.name,
+      type: channel.type,
+      ok: sendResult.ok,
+      attempts: sendResult.attempts,
+      error: sendResult.error,
+    };
+    results.push(row);
+    if (!sendResult.ok) {
+      appendDeadLetter({
+        ts: nowIso(),
+        source: SERVICE_NAME,
+        binding: binding.name,
         channel: channel.name,
-        type: channel.type,
-        ok: false,
-        error: error?.message || "send failed",
+        channelType: channel.type,
+        attempts: sendResult.attempts,
+        error: sendResult.error,
+        meta,
       });
     }
   }
   const successCount = results.filter((item) => item.ok).length;
   return { successCount, results };
+}
+
+function runDispatchWorker() {
+  if (dispatchWorkerRunning) return;
+  dispatchWorkerRunning = true;
+  const next = async () => {
+    const job = dispatchQueue.shift();
+    if (!job) {
+      dispatchWorkerRunning = false;
+      return;
+    }
+    try {
+      const dispatch = await dispatchMessage(job.binding, job.message, job.meta);
+      job.resolve(dispatch);
+    } catch (error) {
+      job.resolve({
+        results: [],
+        successCount: 0,
+        error: error?.message || "dispatch failed",
+      });
+    }
+    setImmediate(next);
+  };
+  setImmediate(next);
+}
+
+function enqueueDispatchMessage(binding, message, meta = {}) {
+  return new Promise((resolve) => {
+    dispatchQueue.push({ binding, message, meta, resolve });
+    runDispatchWorker();
+  });
 }
 
 async function processBindingEvent(binding, event) {
@@ -414,14 +832,30 @@ async function processBindingEvent(binding, event) {
       lastAlertAt: 0,
       lastRecoverAt: 0,
       lastSeenAt: 0,
+      lastSilencedAt: 0,
+      lastSilence: "",
+      isActive: false,
     });
 
   const previousSeverity = previous.lastSeverity;
+  const silence = getBindingSilence(binding, event, event.severity, now);
+  if (silence.silenced) {
+    previous.lastSilencedAt = now;
+    previous.lastSilence = `${silence.name} until ${silence.endAt || "n/a"}`;
+  } else {
+    previous.lastSilence = "";
+  }
 
   if (event.status === "resolved") {
-    if (previous.status !== "ok" && binding.notifyRecover) {
+    if (previous.status !== "ok" && binding.notifyRecover && !silence.silenced) {
       const message = formatAlertMessage("recover", binding, event, previousSeverity);
-      const dispatch = await dispatchMessage(binding, message);
+      const dispatch = await enqueueDispatchMessage(binding, message, {
+        eventType: "recover",
+        target: event.target,
+        instance: event.instance,
+        alertname: event.alertname,
+        severity: event.severity,
+      });
       if (dispatch.successCount > 0) previous.lastRecoverAt = now;
       previous.lastDispatch = dispatch;
     }
@@ -429,7 +863,8 @@ async function processBindingEvent(binding, event) {
     previous.lastSeverity = "ok";
     previous.reasonHash = "";
     previous.lastSeenAt = now;
-    stateByBindingAlert.set(key, previous);
+    previous.isActive = false;
+    setBindingAlertState(key, previous);
     return { sent: previous.lastDispatch?.successCount || 0 };
   }
 
@@ -438,11 +873,11 @@ async function processBindingEvent(binding, event) {
     previous.lastSeverity = event.severity;
     previous.reasonHash = event.reasonHash;
     previous.lastSeenAt = now;
-    stateByBindingAlert.set(key, previous);
+    setBindingAlertState(key, previous);
     return { sent: 0 };
   }
 
-  const firstAlert = previous.status === "ok";
+  const firstActiveAlert = !previous.isActive;
   const severityEscalated =
     severityRank(event.severity) > severityRank(previous.lastSeverity || "ok");
   const reasonChanged = previous.reasonHash !== event.reasonHash;
@@ -452,12 +887,18 @@ async function processBindingEvent(binding, event) {
   const remindDue = remindMs > 0 && now - (previous.lastAlertAt || 0) >= remindMs;
 
   const shouldSend =
-    firstAlert || severityEscalated || (reasonChanged && cooldownPassed) || remindDue;
+    firstActiveAlert || severityEscalated || (reasonChanged && cooldownPassed) || remindDue;
 
   let sent = 0;
-  if (shouldSend) {
+  if (shouldSend && !silence.silenced) {
     const message = formatAlertMessage("alert", binding, event, previousSeverity);
-    const dispatch = await dispatchMessage(binding, message);
+    const dispatch = await enqueueDispatchMessage(binding, message, {
+      eventType: "alert",
+      target: event.target,
+      instance: event.instance,
+      alertname: event.alertname,
+      severity: event.severity,
+    });
     if (dispatch.successCount > 0) {
       previous.lastAlertAt = now;
       sent = dispatch.successCount;
@@ -465,11 +906,17 @@ async function processBindingEvent(binding, event) {
     previous.lastDispatch = dispatch;
   }
 
+  if (firstActiveAlert) {
+    previous.isActive = !silence.silenced;
+  } else if (previous.isActive) {
+    previous.isActive = true;
+  }
+
   previous.status = event.severity;
   previous.lastSeverity = event.severity;
   previous.reasonHash = event.reasonHash;
   previous.lastSeenAt = now;
-  stateByBindingAlert.set(key, previous);
+  setBindingAlertState(key, previous);
   return { sent };
 }
 
@@ -477,25 +924,109 @@ function cleanupStates() {
   const now = Date.now();
   for (const [key, value] of stateByBindingAlert.entries()) {
     if (!value || !Number.isFinite(value.lastSeenAt)) {
-      stateByBindingAlert.delete(key);
+      deleteBindingAlertState(key);
       continue;
     }
     if (now - value.lastSeenAt > Math.max(60000, STATE_TTL_MS)) {
-      stateByBindingAlert.delete(key);
+      deleteBindingAlertState(key);
     }
   }
 }
 
 const app = express();
+installProcessGuards();
+initStateStore();
+restoreStateFromStore();
+process.on("exit", closeStateStore);
+process.on("SIGINT", () => {
+  closeStateStore();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  closeStateStore();
+  process.exit(0);
+});
+
+logEvent("info", "startup.config", {
+  port: PORT,
+  requestTimeoutMs: REQUEST_TIMEOUT_MS,
+  stateTtlMs: STATE_TTL_MS,
+  notificationsFile: NOTIFICATIONS_FILE,
+  notifyRetryCount: NOTIFY_RETRY_COUNT,
+  notifyRetryBackoffMs: NOTIFY_RETRY_BACKOFF_MS,
+  deadletterFile: DEADLETTER_FILE,
+  statePersistEnabled: STATE_PERSIST_ENABLED,
+  stateStoreBackend: stateStore.backend,
+  stateDbFile: stateStore.dbFile,
+  apiVersion: API_VERSION,
+});
 app.use(express.json({ limit: "2mb" }));
+app.use((req, res, next) => {
+  const requestUrl = String(req.url || "");
+  if (requestUrl === `/api/${API_VERSION}` || requestUrl.startsWith(`/api/${API_VERSION}/`)) {
+    req.apiVersion = API_VERSION;
+    req.url = requestUrl.replace(`/api/${API_VERSION}`, "/api");
+  } else if (requestUrl === "/api" || requestUrl.startsWith("/api/")) {
+    req.apiVersion = "legacy";
+  }
+  return next();
+});
+app.use((req, res, next) => {
+  const requestUrl = String(req.url || "");
+  if (requestUrl === "/api" || requestUrl.startsWith("/api/")) {
+    res.setHeader("X-API-Version", req.apiVersion || "legacy");
+  }
+  return next();
+});
 
 app.get("/healthz", (_req, res) => {
   const notifications = loadNotifications();
   res.json({
     ok: true,
+    service: "monitor-notify-bridge",
     enabled: notifications.enabled,
     bindings: notifications.bindings.length,
     stateEntries: stateByBindingAlert.size,
+    statePersistEnabled: STATE_PERSIST_ENABLED,
+    stateStoreBackend: stateStore.backend,
+    dispatchQueueLength: dispatchQueue.length,
+    uptimeSec: Math.floor(process.uptime()),
+    startedAt: new Date(STARTED_AT).toISOString(),
+    timestamp: nowIso(),
+  });
+});
+
+app.get("/readyz", (_req, res) => {
+  if (STATE_PERSIST_ENABLED && !stateStore.enabled) {
+    return res.status(503).json({
+      ok: false,
+      service: "monitor-notify-bridge",
+      message: "state store not ready",
+      stateStoreBackend: stateStore.backend,
+      stateStoreReason: stateStore.reason,
+      timestamp: nowIso(),
+    });
+  }
+  const config = checkNotificationsConfigReady();
+  if (!config.ok) {
+    return res.status(503).json({
+      ok: false,
+      service: "monitor-notify-bridge",
+      message: config.message || "notify-bridge not ready",
+      configSource: config.source,
+      configDetail: config.detail,
+      timestamp: nowIso(),
+    });
+  }
+  const notifications = loadNotifications();
+  return res.json({
+    ok: true,
+    service: "monitor-notify-bridge",
+    configSource: config.source,
+    configDetail: config.detail,
+    bindings: notifications.bindings.length,
+    stateStoreBackend: stateStore.backend,
+    stateDbFile: stateStore.dbFile,
     timestamp: nowIso(),
   });
 });
@@ -537,15 +1068,20 @@ app.post("/api/alerts/webhook", async (req, res) => {
       timestamp: nowIso(),
     });
   } catch (error) {
-    console.error("webhook failed:", error?.message || error);
-    res.status(500).json({ message: error?.message || "webhook failed" });
+    logEvent("error", "webhook.failed", { error: serializeError(error) });
+    return sendApiError(res, 500, "WEBHOOK_FAILED", error?.message || "webhook failed");
   }
 });
 
 app.post("/api/alerts/test", async (req, res) => {
   const notifications = loadNotifications();
   if (!notifications.enabled || !notifications.bindings.length) {
-    return res.status(400).json({ message: "notifications disabled or no bindings configured" });
+    return sendApiError(
+      res,
+      400,
+      "NOTIFICATIONS_DISABLED",
+      "notifications disabled or no bindings configured"
+    );
   }
 
   const bindingName = String(req.body?.binding || "").trim();
@@ -553,7 +1089,7 @@ app.post("/api/alerts/test", async (req, res) => {
     bindingName ? binding.name === bindingName : true
   );
   if (!selectedBindings.length) {
-    return res.status(404).json({ message: "binding not found" });
+    return sendApiError(res, 404, "BINDING_NOT_FOUND", "binding not found");
   }
 
   const severity = normalizeSeverity(req.body?.severity || "danger");
@@ -576,7 +1112,13 @@ app.post("/api/alerts/test", async (req, res) => {
   const results = [];
   for (const binding of selectedBindings) {
     const message = formatAlertMessage("test", binding, event, "ok");
-    const dispatch = await dispatchMessage(binding, message);
+    const dispatch = await enqueueDispatchMessage(binding, message, {
+      eventType: "test",
+      target: event.target,
+      instance: event.instance,
+      alertname: event.alertname,
+      severity: event.severity,
+    });
     results.push({
       binding: binding.name,
       successCount: dispatch.successCount,
@@ -590,6 +1132,6 @@ app.post("/api/alerts/test", async (req, res) => {
 setInterval(cleanupStates, 60 * 1000);
 
 app.listen(PORT, () => {
-  console.log(`monitor-notify-bridge running on http://0.0.0.0:${PORT}`);
-  console.log(`notifications file: ${NOTIFICATIONS_FILE}`);
+  logEvent("info", "startup.ready", { listen: `http://0.0.0.0:${PORT}` });
+  logEvent("info", "config.notifications_file", { path: NOTIFICATIONS_FILE });
 });

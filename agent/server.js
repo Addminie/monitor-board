@@ -10,6 +10,11 @@ const AUTH_TOKEN = String(process.env.AGENT_TOKEN || "").trim();
 const CMD_TIMEOUT_MS = Number(process.env.CMD_TIMEOUT_MS || 1500);
 const STATUS_CACHE_TTL_MS = Number(process.env.STATUS_CACHE_TTL_MS || 2000);
 const METRICS_TOKEN = String(process.env.METRICS_TOKEN || "").trim();
+const STARTED_AT = Date.now();
+const SERVICE_NAME = "monitor-agent";
+const API_VERSION = "v1";
+const EXIT_ON_UNCAUGHT_EXCEPTION =
+  String(process.env.EXIT_ON_UNCAUGHT_EXCEPTION || "false").toLowerCase() === "true";
 
 let lastNetSample = null;
 let lastDiskSample = null;
@@ -21,6 +26,54 @@ let statusCache = {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function serializeError(error) {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  return String(error.stack || error.message || error);
+}
+
+function logEvent(level, event, details = {}) {
+  const payload = {
+    ts: nowIso(),
+    level,
+    service: SERVICE_NAME,
+    event,
+    ...details,
+  };
+  const line = JSON.stringify(payload);
+  if (level === "error" || level === "fatal") {
+    console.error(line);
+    return;
+  }
+  console.log(line);
+}
+
+function sendApiError(res, status, code, message, details = null) {
+  const errorPayload = {
+    code: String(code || "INTERNAL_ERROR"),
+    message: String(message || "request failed"),
+  };
+  if (details && typeof details === "object") {
+    errorPayload.details = details;
+  }
+  return res.status(status).json({
+    message: errorPayload.message,
+    error: errorPayload,
+  });
+}
+
+function installProcessGuards() {
+  process.on("unhandledRejection", (reason) => {
+    logEvent("error", "process.unhandled_rejection", { error: serializeError(reason) });
+  });
+  process.on("uncaughtException", (error) => {
+    logEvent("fatal", "process.uncaught_exception", { error: serializeError(error) });
+    if (EXIT_ON_UNCAUGHT_EXCEPTION) {
+      setTimeout(() => process.exit(1), 200).unref();
+    }
+  });
 }
 
 function getCpuSnapshot() {
@@ -759,7 +812,7 @@ function requireToken(req, res, next) {
     .replace("Bearer ", "")
     .trim();
   if (!headerToken || headerToken !== AUTH_TOKEN) {
-    return res.status(403).json({ message: "forbidden" });
+    return sendApiError(res, 403, "AUTH_FORBIDDEN", "forbidden");
   }
   return next();
 }
@@ -776,9 +829,61 @@ function requireMetricsToken(req, res, next) {
 }
 
 const app = express();
+installProcessGuards();
+
+logEvent("info", "startup.config", {
+  port: PORT,
+  cmdTimeoutMs: CMD_TIMEOUT_MS,
+  statusCacheTtlMs: STATUS_CACHE_TTL_MS,
+  authEnabled: Boolean(AUTH_TOKEN),
+  metricsAuthEnabled: Boolean(METRICS_TOKEN),
+  apiVersion: API_VERSION,
+});
+app.use((req, res, next) => {
+  const requestUrl = String(req.url || "");
+  if (requestUrl === `/api/${API_VERSION}` || requestUrl.startsWith(`/api/${API_VERSION}/`)) {
+    req.apiVersion = API_VERSION;
+    req.url = requestUrl.replace(`/api/${API_VERSION}`, "/api");
+  } else if (requestUrl === "/api" || requestUrl.startsWith("/api/")) {
+    req.apiVersion = "legacy";
+  }
+  return next();
+});
+app.use((req, res, next) => {
+  const requestUrl = String(req.url || "");
+  if (requestUrl === "/api" || requestUrl.startsWith("/api/")) {
+    res.setHeader("X-API-Version", req.apiVersion || "legacy");
+  }
+  return next();
+});
 
 app.get("/healthz", (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    service: "monitor-agent",
+    uptimeSec: Math.floor(process.uptime()),
+    startedAt: new Date(STARTED_AT).toISOString(),
+    timestamp: nowIso(),
+  });
+});
+
+app.get("/readyz", async (_req, res) => {
+  try {
+    const data = await getStatusCached();
+    res.json({
+      ok: true,
+      service: "monitor-agent",
+      timestamp: nowIso(),
+      statusTimestamp: data?.timestamp || null,
+    });
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      service: "monitor-agent",
+      message: error?.message || "agent not ready",
+      timestamp: nowIso(),
+    });
+  }
 });
 
 app.get("/api/monitor/status", requireToken, async (_req, res) => {
@@ -786,7 +891,13 @@ app.get("/api/monitor/status", requireToken, async (_req, res) => {
     const data = await getStatusCached();
     res.json(data);
   } catch (error) {
-    res.status(500).json({ message: error?.message || "monitor failed" });
+    res.status(500).json({
+      message: error?.message || "monitor failed",
+      error: {
+        code: "MONITOR_STATUS_FAILED",
+        message: error?.message || "monitor failed",
+      },
+    });
   }
 });
 
@@ -801,5 +912,5 @@ app.get("/metrics", requireMetricsToken, async (_req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`monitor-agent running on http://0.0.0.0:${PORT}`);
+  logEvent("info", "startup.ready", { listen: `http://0.0.0.0:${PORT}` });
 });

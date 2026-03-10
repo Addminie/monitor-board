@@ -14,9 +14,27 @@ alerting:
 scrape_configs:
   - job_name: monitor-agent
     metrics_path: /metrics
-    static_configs:
-      - targets:
-          - agent-local:9101
-        labels:
-          target: local-agent
-          env: local
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/*.yml
+    relabel_configs:
+      - source_labels: [target]
+        regex: ^$
+        target_label: target
+        replacement: unknown
+      - source_labels: [env]
+        regex: ^$
+        target_label: env
+        replacement: unknown
+      - source_labels: [business]
+        regex: ^$
+        target_label: business
+        replacement: unknown
+      - source_labels: [room]
+        regex: ^$
+        target_label: room
+        replacement: unknown
+      - source_labels: [owner]
+        regex: ^$
+        target_label: owner
+        replacement: unknown

@@ -1,6 +1,8 @@
 # Node
 node_modules/
 npm-debug.log*
+test-results/
+playwright-report/
 
 # Logs
 *.log
@@ -8,13 +10,21 @@ npm-debug.log*
 
 # Local runtime files
 .local-pids.txt
+logs/
+dashboard/logs/
+notify-bridge/logs/
+dashboard/data/
+notify-bridge/data/
+tmp_state_test.db
 
 # Secrets / local config
 .env
 .env.*
+!.env.example
 dashboard/config/targets.json
 dashboard/config/alerts.json
 dashboard/config/notifications.json
+dashboard/config/backups/
 
 # Large local installer
 DockerDesktopInstaller.exe

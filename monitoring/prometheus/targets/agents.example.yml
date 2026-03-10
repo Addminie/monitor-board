@@ -1,0 +1,9 @@
+- targets:
+    - agent-local:9101
+  labels:
+    target: local-agent
+    env: local
+    business: platform
+    room: local
+    owner: devops
+

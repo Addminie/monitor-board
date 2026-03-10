@@ -2,6 +2,14 @@
   "enabled": false,
   "cooldownSec": 300,
   "remindIntervalSec": 0,
+  "escalateAfterSec": 0,
+  "escalateIntervalSec": 1800,
+  "escalateMaxTimes": 3,
+  "escalateSeverities": ["danger", "offline"],
+  "messageLocale": "zh-CN",
+  "messageTemplates": {
+    "alert": "{{titlePrefix}} {{targetName}}\n绑定: {{bindingName}}\n地址: {{targetUrl}}\n级别: {{severity}}\n原因:\n{{reasons}}\n时间: {{timestamp}}"
+  },
   "bindings": [
     {
       "name": "ops-all",
@@ -9,19 +17,27 @@
       "targets": ["*"],
       "severities": ["offline", "danger"],
       "notifyRecover": true,
+      "escalateAfterSec": 1800,
+      "escalateIntervalSec": 1800,
+      "escalateMaxTimes": 3,
+      "escalateSeverities": ["danger", "offline"],
       "channels": [
         {
           "type": "wechat",
           "name": "wechat-ops",
           "webhook": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY",
+          "messageLocale": "zh-CN",
+          "messageTemplates": {
+            "alert": "{{titlePrefix}} {{targetName}}\n渠道: {{bindingName}}/wechat\n级别: {{severity}}\n原因:\n{{reasons}}\n时间: {{timestamp}}"
+          },
           "mentionedMobileList": [],
           "mentionedList": []
         },
         {
           "type": "telegram",
           "name": "telegram-ops",
-          "botToken": "123456:YOUR_BOT_TOKEN",
-          "chatId": "-1001234567890"
+          "botToken": "YOUR_TELEGRAM_BOT_TOKEN",
+          "chatId": "YOUR_TELEGRAM_CHAT_ID"
         },
         {
           "type": "dingtalk",

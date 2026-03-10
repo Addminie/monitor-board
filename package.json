@@ -1,0 +1,21 @@
+{
+  "name": "monitor-board-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "lint": "node scripts/check-syntax.js",
+    "ops:doctor": "node scripts/ops-doctor.js",
+    "ops:doctor:strict": "node scripts/ops-doctor.js --strict",
+    "ops:verify-dual-stack": "node scripts/verify-dual-stack.js",
+    "ops:verify-dual-stack:strict": "node scripts/verify-dual-stack.js --strict",
+    "ops:capacity": "node scripts/capacity-benchmark.js",
+    "test": "node --test tests/**/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=dashboard/lib/api-utils.js --test-coverage-lines=70 --test-coverage-functions=70 --test-coverage-branches=70 tests/**/*.test.js",
+    "test:e2e": "playwright test",
+    "test:all": "npm run lint && npm test && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

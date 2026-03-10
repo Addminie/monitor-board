@@ -10,61 +10,164 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="breadcrumb">首页 > 仪表板 > 多服务器监控</div>
-      <div class="controls">
-        <label class="control">
-          刷新
-          <select id="refresh-interval">
-            <option value="5000">5s</option>
-            <option value="10000">10s</option>
-            <option value="30000">30s</option>
-            <option value="60000">60s</option>
-          </select>
-        </label>
-        <label class="control checkbox-control">
-          <input id="auto-refresh" type="checkbox" checked />
-          自动刷新
-        </label>
-        <label class="control">
-          状态
-          <select id="filter-status">
-            <option value="all">全部</option>
-            <option value="online">在线</option>
-            <option value="offline">离线</option>
-            <option value="alert">告警</option>
-          </select>
-        </label>
-        <input id="search-input" class="search-input" placeholder="搜索名称..." />
-        <label class="control">
-          排序
-          <select id="sort-by">
-            <option value="severity">按风险</option>
-            <option value="cpu">按 CPU</option>
-            <option value="mem">按内存</option>
-            <option value="disk">按磁盘</option>
-            <option value="name">按名称</option>
-          </select>
-        </label>
-        <label class="control">
-          字号
-          <select id="font-size">
-            <option value="small">小</option>
-            <option value="medium" selected>中</option>
-            <option value="large">大</option>
-          </select>
-        </label>
-        <button id="refresh-btn" class="button">立即刷新</button>
+    <header class="top-shell">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="breadcrumb">首页 &gt; 仪表板 &gt; 多服务器监控</div>
+          <div class="page-title-row">
+            <h1 class="page-title">多服务器监控看板</h1>
+            <span class="page-subtitle">值班、排障、容量趋势一屏查看</span>
+          </div>
+        </div>
+        <div class="topbar-actions" aria-label="快捷操作">
+          <button id="top-controls-toggle" class="button" type="button" aria-expanded="false">
+            展开筛选
+          </button>
+          <button id="diagnose-btn" class="button" type="button">一键诊断</button>
+          <button id="refresh-btn" class="button" type="button">立即刷新</button>
+        </div>
+      </div>
+
+      <div id="top-controls-grid" class="controls-grid" aria-label="顶部筛选区">
+        <section class="control-card">
+          <div class="control-card-head">
+            <div class="control-card-title">采集设置</div>
+          </div>
+          <div class="control-row">
+            <label class="control">
+              刷新
+              <select id="refresh-interval" aria-label="刷新频率">
+                <option value="5000">5s</option>
+                <option value="10000">10s</option>
+                <option value="30000">30s</option>
+                <option value="60000">60s</option>
+              </select>
+            </label>
+            <label class="control checkbox-control">
+              <input id="auto-refresh" type="checkbox" checked />
+              自动刷新
+            </label>
+            <label class="control">
+              图表区间
+              <select id="chart-bucket" aria-label="图表区间">
+                <option value="1m">每分钟</option>
+                <option value="30m">每30分钟</option>
+                <option value="1h">每小时</option>
+                <option value="1d">每天</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="control-card">
+          <div class="control-card-head">
+            <div class="control-card-title">筛选与检索</div>
+          </div>
+          <div class="control-row">
+            <label class="control">
+              状态
+              <select id="filter-status" aria-label="状态筛选">
+                <option value="all">全部</option>
+                <option value="online">在线</option>
+                <option value="offline">离线</option>
+                <option value="alert">告警</option>
+              </select>
+            </label>
+            <label class="control">
+              环境
+              <select id="filter-env" aria-label="环境筛选">
+                <option value="">全部</option>
+              </select>
+            </label>
+            <label class="control">
+              业务
+              <select id="filter-business" aria-label="业务筛选">
+                <option value="">全部</option>
+              </select>
+            </label>
+            <label class="control">
+              机房
+              <select id="filter-room" aria-label="机房筛选">
+                <option value="">全部</option>
+              </select>
+            </label>
+            <label class="control">
+              负责人
+              <select id="filter-owner" aria-label="负责人筛选">
+                <option value="">全部</option>
+              </select>
+            </label>
+            <label class="control">
+              排序
+              <select id="sort-by" aria-label="排序">
+                <option value="severity">按风险</option>
+                <option value="cpu">按 CPU</option>
+                <option value="mem">按内存</option>
+                <option value="disk">按磁盘</option>
+                <option value="name">按名称</option>
+              </select>
+            </label>
+            <input id="search-input" class="search-input" placeholder="搜索名称..." aria-label="搜索名称" />
+          </div>
+        </section>
+
+        <section class="control-card">
+          <div class="control-card-head">
+            <div class="control-card-title">视图与显示</div>
+          </div>
+          <div class="control-row">
+            <label class="control">
+              视图
+              <select id="saved-view-select" aria-label="保存视图">
+                <option value="">当前视图</option>
+              </select>
+            </label>
+            <button id="saved-view-save-btn" class="button" type="button">保存视图</button>
+            <button id="saved-view-delete-btn" class="button" type="button">删除视图</button>
+            <button id="saved-view-reset-btn" class="button" type="button">重置筛选</button>
+            <label class="control">
+              字号
+              <select id="font-size" aria-label="字号">
+                <option value="small">小</option>
+                <option value="medium" selected>中</option>
+                <option value="large">大</option>
+              </select>
+            </label>
+            <label class="control">
+              视图模式
+              <select id="work-mode" aria-label="视图模式">
+                <option value="diagnose">排障模式</option>
+                <option value="oncall">值班模式</option>
+              </select>
+            </label>
+            <button id="layout-mode-toggle" class="button" type="button">切换到紧凑模式</button>
+          </div>
+        </section>
       </div>
     </header>
-    <div class="statusbar">
-      <div id="fetch-status" class="status-msg">准备就绪</div>
-      <div id="alert-config" class="status-time">阈值: -</div>
-      <div id="last-updated" class="status-time">-</div>
-    </div>
+
+    <section class="statusbar" aria-live="polite">
+      <div class="status-card status-card-primary">
+        <div class="status-label">采集状态</div>
+        <div id="fetch-status" class="status-msg">准备就绪</div>
+      </div>
+      <div class="status-card">
+        <div class="status-label">最后刷新</div>
+        <div id="last-updated" class="status-time">-</div>
+        <div id="freshness-summary" class="status-time">数据新鲜度: -</div>
+      </div>
+      <div class="status-card">
+        <div class="status-label">告警阈值</div>
+        <div id="alert-config" class="status-time">阈值: -</div>
+      </div>
+      <div class="status-card">
+        <div class="status-label">标签统计</div>
+        <div id="meta-summary" class="status-time">标签统计: -</div>
+      </div>
+    </section>
 
     <main class="layout">
-      <section class="summary-grid" id="summary-grid">
+      <section class="summary-grid" id="summary-grid" aria-label="核心指标">
         <div class="card">
           <div class="card-title">CPU 使用率</div>
           <div class="card-value" id="sum-cpu">-</div>
@@ -97,18 +200,51 @@
         </div>
       </section>
 
+      <section class="workspace-grid">
+        <section class="incident-panel">
+          <div class="incident-head">
+            <div>
+              <div class="incident-title">事件中心（待处理）</div>
+              <div id="incident-summary" class="muted">-</div>
+            </div>
+            <div class="incident-actions">
+              <label class="control">
+                事件筛选
+                <select id="incident-filter" aria-label="事件筛选">
+                  <option value="pending">待处理</option>
+                  <option value="all">全部</option>
+                  <option value="danger">高风险</option>
+                  <option value="offline">离线</option>
+                  <option value="warn">警告</option>
+                  <option value="acked">已确认</option>
+                  <option value="silenced">已静默</option>
+                </select>
+              </label>
+              <button id="incident-clear-btn" class="button" type="button">清空已确认</button>
+            </div>
+          </div>
+          <div id="incident-list" class="incident-list">
+            <div class="muted">加载中...</div>
+          </div>
+        </section>
+
+        <section class="insight-grid">
+          <div class="chart-panel">
+            <div class="chart-title">风险热度榜 TOP5</div>
+            <div id="risk-summary" class="muted">-</div>
+            <div id="risk-top-list" class="risk-top-list"></div>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">事件趋势（Warn / Danger / Offline）</div>
+            <div id="chart-incidents" class="chart"></div>
+          </div>
+        </section>
+      </section>
+
       <section class="charts-section">
         <div class="charts-head">
           <div class="charts-head-title">趋势图</div>
-          <label class="control">
-            图表区间
-            <select id="chart-bucket">
-              <option value="1m">每分钟</option>
-              <option value="30m">每30分钟</option>
-              <option value="1h">每小时</option>
-              <option value="1d">每天</option>
-            </select>
-          </label>
+          <div class="muted">图表区间由顶部“采集设置”控制</div>
         </div>
         <div class="charts-grid">
           <div class="chart-panel">
@@ -130,8 +266,19 @@
         </div>
       </section>
 
-      <section class="table-panel">
-        <div class="table-title">资源总览（点击行查看单机详情）</div>
+      <section class="table-panel" aria-label="资源总览">
+        <div class="table-head">
+          <div>
+            <div class="table-title">资源总览（点击行查看单机详情）</div>
+            <div id="table-summary" class="muted">-</div>
+          </div>
+          <div class="table-toolbar" aria-label="快捷筛选">
+            <button id="table-quick-all" class="button" type="button">全部</button>
+            <button id="table-quick-alert" class="button" type="button">仅故障</button>
+            <button id="table-quick-online" class="button" type="button">仅在线</button>
+            <button id="table-clear-search" class="button" type="button">清空搜索</button>
+          </div>
+        </div>
         <table>
           <thead>
             <tr>
@@ -146,18 +293,30 @@
               <th>Docker</th>
               <th>错误</th>
               <th>更新时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody id="servers-table">
-            <tr><td colspan="11" class="muted">加载中...</td></tr>
+            <tr><td colspan="12" class="muted">加载中...</td></tr>
           </tbody>
         </table>
       </section>
 
-      <section class="detail-panel">
+      <section class="detail-panel" aria-label="单机详情">
         <div class="detail-head">
-          <div class="detail-title">单机详情</div>
-          <div id="detail-target" class="detail-target muted">未选择服务器</div>
+          <div class="detail-title-wrap">
+            <div class="detail-title">单机详情</div>
+            <div id="detail-target" class="detail-target muted">未选择服务器</div>
+          </div>
+          <div class="detail-actions">
+            <button id="detail-expand-all-btn" class="button" type="button">展开全部</button>
+            <button id="detail-collapse-all-btn" class="button" type="button">收起全部</button>
+          </div>
+        </div>
+        <div class="detail-tabbar" role="tablist" aria-label="详情视角切换">
+          <button id="detail-tab-overview" class="button detail-tab is-active" type="button" role="tab" aria-selected="true" data-detail-tab="overview">全部</button>
+          <button id="detail-tab-alerts" class="button detail-tab" type="button" role="tab" aria-selected="false" data-detail-tab="alerts">故障定位</button>
+          <button id="detail-tab-system" class="button detail-tab" type="button" role="tab" aria-selected="false" data-detail-tab="system">系统资源</button>
         </div>
         <div id="detail-body" class="detail-body muted">点击上方任意服务器行查看详情</div>
       </section>
