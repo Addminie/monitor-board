@@ -12,6 +12,14 @@
   - Trigger: `workflow_dispatch`
   - Input: `stage` (`staging|production`), `ref`, `compose_file`
   - Action: SSH to deploy host and execute staged docker compose deploy
+- `auto-release.yml`
+  - Trigger: every `push` to `main` (including merge commits)
+  - Action:
+    - read latest semver tag (`vX.Y.Z`)
+    - auto create next patch tag (`vX.Y.(Z+1)`)
+    - push tag to origin
+    - publish GitHub Release with generated notes
+  - Skip rule: if current commit already has a semver tag, workflow will skip auto tagging
 
 ## 2. Required Repo Secrets
 
@@ -23,6 +31,11 @@ For `staged-deploy.yml`:
 - `DEPLOY_PATH`
 
 Recommended: configure GitHub Environments `staging` / `production` and enable approval rules.
+
+For `auto-release.yml`:
+
+- No extra secret required (uses `GITHUB_TOKEN`)
+- Ensure repository setting **Workflow permissions** is set to **Read and write permissions** (so Actions can push tags)
 
 ## 3. Quality Gate Rules
 

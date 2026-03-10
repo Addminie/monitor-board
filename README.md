@@ -868,6 +868,10 @@ npm run test:all
 - `.github/workflows/staged-deploy.yml`
   - 手工触发分阶段部署（`staging` / `production`）
   - 使用 SSH 到目标机器执行 `docker compose pull && up -d`
+- `.github/workflows/auto-release.yml`
+  - 每次合并/推送到 `main` 自动发版
+  - 版本号规则：读取最新 `vX.Y.Z`，自动生成下一个补丁版本 `vX.Y.(Z+1)`
+  - 自动创建 Git tag + GitHub Release（自动生成发布说明）
 
 详细说明见：`docs/CI_CD.md`
 
