@@ -1,0 +1,114 @@
+services:
+  agent-local:
+    build:
+      context: ./agent
+    container_name: monitor-agent-local
+    environment:
+      PORT: "9101"
+      AGENT_TOKEN: "123456"
+    ports:
+      - "9101:9101"
+    restart: unless-stopped
+    networks:
+      - monitor-net
+
+  dashboard:
+    build:
+      context: ./dashboard
+    container_name: monitor-dashboard
+    depends_on:
+      - agent-local
+    environment:
+      PORT: "9200"
+      REQUEST_TIMEOUT_MS: "3000"
+      ALERT_LOOP_ENABLED: "false"
+    volumes:
+      - ./dashboard/config/targets.docker.example.json:/app/config/targets.json:ro
+      - ./dashboard/config/notifications.example.json:/app/config/notifications.json:ro
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+    networks:
+      - monitor-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: monitor-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    depends_on:
+      - agent-local
+      - alertmanager
+    networks:
+      - monitor-net
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: monitor-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
+    restart: unless-stopped
+    depends_on:
+      - notify-bridge
+    networks:
+      - monitor-net
+
+  notify-bridge:
+    build:
+      context: ./notify-bridge
+    container_name: monitor-notify-bridge
+    environment:
+      PORT: "9300"
+      REQUEST_TIMEOUT_MS: "8000"
+      NOTIFICATIONS_FILE: "/app/config/notifications.json"
+    volumes:
+      - ./dashboard/config/notifications.example.json:/app/config/notifications.json:ro
+    ports:
+      - "9300:9300"
+    restart: unless-stopped
+    networks:
+      - monitor-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: monitor-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: dark
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 5s
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    networks:
+      - monitor-net
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:
+
+networks:
+  monitor-net:
+    driver: bridge

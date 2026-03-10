@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monitor Board 配置入口（小白模式）</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .config-wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 18px 20px 28px;
+      }
+      .config-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .config-title {
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .tips {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .tips li {
+        margin-bottom: 5px;
+        font-size: 12px;
+      }
+      .config-form {
+        display: grid;
+        gap: 10px;
+      }
+      .config-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(280px, 1fr));
+        gap: 10px;
+      }
+      .config-form input,
+      .config-form select,
+      .config-form textarea {
+        width: 100%;
+        background: #0c121b;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px;
+        font-size: 12px;
+      }
+      .config-form textarea {
+        min-height: 90px;
+        resize: vertical;
+      }
+      .result {
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--muted);
+      }
+      .field-label {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .label-with-help {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .help-tip {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--accent);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        cursor: help;
+        position: relative;
+        user-select: none;
+        font-weight: 700;
+      }
+      .help-tip::after {
+        content: attr(data-tip);
+        position: absolute;
+        left: 50%;
+        top: calc(100% + 8px);
+        transform: translateX(-50%);
+        min-width: 220px;
+        max-width: 340px;
+        background: #0c121b;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px;
+        line-height: 1.4;
+        font-size: 11px;
+        z-index: 20;
+        opacity: 0;
+        pointer-events: none;
+        white-space: normal;
+      }
+      .help-tip:hover::after {
+        opacity: 1;
+      }
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .checkbox-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+      }
+      .hidden {
+        display: none;
+      }
+      .param-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .param-table th,
+      .param-table td {
+        border-bottom: 1px solid var(--border);
+        padding: 6px 8px;
+        font-size: 12px;
+        text-align: left;
+      }
+      .inline-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .step-note {
+        font-size: 12px;
+        color: var(--muted);
+        padding: 8px;
+        border: 1px dashed var(--border);
+        background: #0b1018;
+      }
+      .radio-group {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        font-size: 12px;
+      }
+      .radio-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      @media (max-width: 760px) {
+        .config-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="breadcrumb">首页 &gt; 配置入口 &gt; 告警通知（小白模式）</div>
+      <div class="controls">
+        <a class="button" href="/">返回看板</a>
+      </div>
+    </header>
+
+    <main class="config-wrap">
+      <section class="config-card">
+        <div class="config-title">三步完成绑定</div>
+        <ol class="tips">
+          <li>先在下方填写“绑定生成器”，点击“生成 JSON”。</li>
+          <li>把生成结果复制到 <code>dashboard/config/notifications.json</code>。</li>
+          <li>重启 dashboard，再用“测试发送（小白模式）”验证是否能收到通知。</li>
+        </ol>
+      </section>
+
+      <section class="config-card">
+        <div class="config-title">参数怎么填（最常用）</div>
+        <table class="param-table">
+          <thead>
+            <tr>
+              <th>渠道</th>
+              <th>必填参数</th>
+              <th>获取方式</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>企业微信</td>
+              <td><code>webhook</code></td>
+              <td>企业微信群机器人里复制 Webhook 地址</td>
+            </tr>
+            <tr>
+              <td>Telegram</td>
+              <td><code>botToken</code> + <code>chatId</code></td>
+              <td>BotFather 创建机器人拿 token，群消息里获取 chat_id</td>
+            </tr>
+            <tr>
+              <td>钉钉</td>
+              <td><code>webhook</code>（可选 <code>secret</code>）</td>
+              <td>钉钉群机器人配置页复制 webhook / 签名密钥</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="config-card">
+        <div class="config-title">小白生成器（自动生成 notifications.json）</div>
+        <form id="builder-form" class="config-form">
+          <div class="config-grid">
+            <div>
+              <div class="field-label label-with-help">
+                <span>绑定名称</span>
+                <span class="help-tip" data-tip="给这条通知规则起名字。建议用团队名或场景名，如 ops-all、prod-core。">?</span>
+              </div>
+              <input id="binding-name" value="ops-all" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>渠道类型</span>
+                <span class="help-tip" data-tip="选择通知平台。切换后，下方参数会自动变更。">?</span>
+              </div>
+              <select id="channel-type">
+                <option value="wechat">企业微信</option>
+                <option value="telegram">Telegram</option>
+                <option value="dingtalk">钉钉</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="config-grid">
+            <div>
+              <div class="field-label label-with-help">
+                <span>目标匹配（逗号分隔，留空默认全部）</span>
+                <span class="help-tip" data-tip="决定这条规则通知哪些服务器。支持 *（全部）和通配符，如 prod-*。">?</span>
+              </div>
+              <input id="targets" placeholder="例如: *,prod-*" value="*" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>通知冷却秒数</span>
+                <span class="help-tip" data-tip="同一条告警在冷却时间内不重复发送，避免刷屏。常用 300 秒。">?</span>
+              </div>
+              <input id="cooldown-sec" type="number" min="0" value="300" />
+            </div>
+          </div>
+
+          <div class="config-grid">
+            <div>
+              <div class="field-label label-with-help">
+                <span>重复提醒间隔秒（0 表示关闭）</span>
+                <span class="help-tip" data-tip="告警长期未恢复时按间隔重复提醒。0=关闭重复提醒。">?</span>
+              </div>
+              <input id="remind-sec" type="number" min="0" value="0" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>恢复通知</span>
+                <span class="help-tip" data-tip="勾选后，故障恢复时会发送恢复消息。">?</span>
+              </div>
+              <div class="checkbox-group">
+                <label class="checkbox-item"><input id="notify-recover" type="checkbox" checked />发送恢复通知</label>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="field-label label-with-help">
+              <span>订阅级别</span>
+              <span class="help-tip" data-tip="warn=预警，danger=严重，offline=离线，all=全部。建议至少勾选 danger 和 offline。">?</span>
+            </div>
+            <div class="checkbox-group">
+              <label class="checkbox-item"><input class="sev" type="checkbox" value="warn" />warn</label>
+              <label class="checkbox-item"><input class="sev" type="checkbox" value="danger" checked />danger</label>
+              <label class="checkbox-item"><input class="sev" type="checkbox" value="offline" checked />offline</label>
+              <label class="checkbox-item"><input class="sev" type="checkbox" value="all" />all</label>
+            </div>
+          </div>
+
+          <div class="config-grid">
+            <div>
+              <div class="field-label label-with-help">
+                <span>渠道显示名称</span>
+                <span class="help-tip" data-tip="仅用于区分渠道，例如 wechat-ops、tg-dev。">?</span>
+              </div>
+              <input id="channel-name" value="ops-channel" />
+            </div>
+          </div>
+
+          <div id="wechat-fields" class="config-grid">
+            <div style="grid-column: 1 / -1">
+              <div class="field-label label-with-help">
+                <span>企业微信 Webhook（必填）</span>
+                <span class="help-tip" data-tip="企业微信群里添加“群机器人”后复制 Webhook，形如 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...">?</span>
+              </div>
+              <input id="wechat-webhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>@手机号（可选，逗号分隔）</span>
+                <span class="help-tip" data-tip="填企业微信成员手机号，消息发送时会 @ 这些人。">?</span>
+              </div>
+              <input id="wechat-mobiles" placeholder="13800000000,13900000000" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>@用户ID（可选，逗号分隔）</span>
+                <span class="help-tip" data-tip="填企业微信用户 userid，消息发送时会 @ 这些账号。">?</span>
+              </div>
+              <input id="wechat-users" placeholder="zhangsan,lisi" />
+            </div>
+          </div>
+
+          <div id="telegram-fields" class="config-grid hidden">
+            <div>
+              <div class="field-label label-with-help">
+                <span>Bot Token（必填）</span>
+                <span class="help-tip" data-tip="BotFather 创建机器人后得到的 token，常见格式 123456:ABC...">?</span>
+              </div>
+              <input id="tg-token" placeholder="123456:ABC..." />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>Chat ID（必填）</span>
+                <span class="help-tip" data-tip="接收通知的群/用户 ID。群一般是负数，如 -1001234567890。">?</span>
+              </div>
+              <input id="tg-chat-id" placeholder="-1001234567890" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>Topic ID（可选）</span>
+                <span class="help-tip" data-tip="仅 Telegram 话题群需要。普通群留空。">?</span>
+              </div>
+              <input id="tg-topic-id" placeholder="1234" />
+            </div>
+          </div>
+
+          <div id="dingtalk-fields" class="config-grid hidden">
+            <div style="grid-column: 1 / -1">
+              <div class="field-label label-with-help">
+                <span>钉钉 Webhook（必填）</span>
+                <span class="help-tip" data-tip="钉钉群机器人配置页复制 webhook，形如 https://oapi.dingtalk.com/robot/send?access_token=...">?</span>
+              </div>
+              <input id="dt-webhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>签名密钥 secret（可选）</span>
+                <span class="help-tip" data-tip="如果机器人开启了“加签”，这里必须填 SEC 开头的 secret。">?</span>
+              </div>
+              <input id="dt-secret" placeholder="SECxxxx" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>@手机号（可选，逗号分隔）</span>
+                <span class="help-tip" data-tip="填钉钉成员手机号，消息发送时会 @ 这些人。">?</span>
+              </div>
+              <input id="dt-mobiles" placeholder="13800000000,13900000000" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>@所有人</span>
+                <span class="help-tip" data-tip="勾选后会在钉钉群里 @所有人，请谨慎使用。">?</span>
+              </div>
+              <div class="checkbox-group">
+                <label class="checkbox-item"><input id="dt-at-all" type="checkbox" />@所有人</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="inline-actions">
+            <button class="button" id="generate-btn" type="submit">生成 JSON</button>
+            <button class="button" id="copy-btn" type="button">复制完整 notifications.json</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="config-card">
+        <div class="config-title">生成结果（复制到 notifications.json）</div>
+        <textarea id="json-output" class="result" readonly></textarea>
+      </section>
+
+      <section class="config-card">
+        <div class="config-title">测试发送（小白模式）</div>
+        <div class="step-note">
+          不会填“绑定名称/目标名称”时：直接点“使用当前绑定名”，目标保持默认即可。
+        </div>
+        <form id="test-form" class="config-form">
+          <div class="radio-group">
+            <label class="radio-item"><input type="radio" name="test-scope" value="single" checked />只测一个绑定</label>
+            <label class="radio-item"><input type="radio" name="test-scope" value="all" />测试全部绑定</label>
+          </div>
+
+          <div id="test-binding-block" class="config-grid">
+            <div>
+              <div class="field-label label-with-help">
+                <span>绑定名称</span>
+                <span class="help-tip" data-tip="通常填你上面“绑定名称”的值，例如 ops-all。">?</span>
+              </div>
+              <input id="test-binding" placeholder="例如: ops-all" />
+            </div>
+            <div class="inline-actions" style="align-items:flex-end;">
+              <button id="sync-binding-btn" class="button" type="button">使用当前绑定名</button>
+            </div>
+          </div>
+
+          <div class="config-grid">
+            <div>
+              <div class="field-label label-with-help">
+                <span>目标名称</span>
+                <span class="help-tip" data-tip="只是显示在测试消息里的名字，不影响真实监控。默认 manual-test 即可。">?</span>
+              </div>
+              <input id="test-target" value="manual-test" />
+            </div>
+            <div>
+              <div class="field-label label-with-help">
+                <span>测试级别</span>
+                <span class="help-tip" data-tip="建议先选 danger，最容易看出效果。">?</span>
+              </div>
+              <select id="test-severity">
+                <option value="danger">danger</option>
+                <option value="offline">offline</option>
+                <option value="warn">warn</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div class="field-label label-with-help">
+              <span>测试消息（可选）</span>
+              <span class="help-tip" data-tip="可留空；留空会自动使用默认测试文案。">?</span>
+            </div>
+            <textarea id="test-message" placeholder="例如: manual test from config page"></textarea>
+          </div>
+          <button class="button" type="submit">发送测试通知</button>
+        </form>
+      </section>
+
+      <section class="config-card">
+        <div class="config-title">接口结果</div>
+        <div id="result" class="result">尚未发送</div>
+      </section>
+    </main>
+
+    <script>
+      function get(id) {
+        return document.getElementById(id);
+      }
+
+      function splitList(input) {
+        return String(input || "")
+          .split(/[\n,]/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+
+      function toggleFields() {
+        const type = get("channel-type").value;
+        get("wechat-fields").classList.toggle("hidden", type !== "wechat");
+        get("telegram-fields").classList.toggle("hidden", type !== "telegram");
+        get("dingtalk-fields").classList.toggle("hidden", type !== "dingtalk");
+      }
+
+      function toggleTestScope() {
+        const checked = document.querySelector("input[name='test-scope']:checked");
+        const isAll = checked && checked.value === "all";
+        get("test-binding-block").classList.toggle("hidden", isAll);
+        if (isAll) get("test-binding").value = "";
+      }
+
+      function buildChannel() {
+        const type = get("channel-type").value;
+        const name = get("channel-name").value.trim() || "ops-channel";
+
+        if (type === "wechat") {
+          const webhook = get("wechat-webhook").value.trim();
+          if (!webhook) throw new Error("企业微信 webhook 不能为空");
+          return {
+            type: "wechat",
+            name,
+            webhook,
+            mentionedMobileList: splitList(get("wechat-mobiles").value),
+            mentionedList: splitList(get("wechat-users").value),
+          };
+        }
+
+        if (type === "telegram") {
+          const botToken = get("tg-token").value.trim();
+          const chatId = get("tg-chat-id").value.trim();
+          if (!botToken || !chatId) throw new Error("Telegram botToken/chatId 不能为空");
+          const topicId = get("tg-topic-id").value.trim();
+          return {
+            type: "telegram",
+            name,
+            botToken,
+            chatId,
+            ...(topicId ? { topicId } : {}),
+          };
+        }
+
+        const webhook = get("dt-webhook").value.trim();
+        if (!webhook) throw new Error("钉钉 webhook 不能为空");
+        const secret = get("dt-secret").value.trim();
+        return {
+          type: "dingtalk",
+          name,
+          webhook,
+          ...(secret ? { secret } : {}),
+          atMobiles: splitList(get("dt-mobiles").value),
+          isAtAll: get("dt-at-all").checked,
+        };
+      }
+
+      function getSeverities() {
+        const values = Array.from(document.querySelectorAll(".sev:checked")).map(
+          (node) => node.value
+        );
+        return values.length ? values : ["danger", "offline"];
+      }
+
+      function buildNotificationsJson() {
+        const bindingName = get("binding-name").value.trim() || "ops-all";
+        const cooldownSec = Number(get("cooldown-sec").value || 300);
+        const remindIntervalSec = Number(get("remind-sec").value || 0);
+        return {
+          enabled: true,
+          cooldownSec: Math.max(0, cooldownSec),
+          remindIntervalSec: Math.max(0, remindIntervalSec),
+          bindings: [
+            {
+              name: bindingName,
+              enabled: true,
+              targets: splitList(get("targets").value).length
+                ? splitList(get("targets").value)
+                : ["*"],
+              severities: getSeverities(),
+              notifyRecover: get("notify-recover").checked,
+              channels: [buildChannel()],
+            },
+          ],
+        };
+      }
+
+      function showJson() {
+        const output = get("json-output");
+        const data = buildNotificationsJson();
+        output.value = JSON.stringify(data, null, 2);
+      }
+
+      async function copyOutput() {
+        const output = get("json-output").value.trim();
+        if (!output) {
+          alert("请先点击“生成 JSON”");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(output);
+          alert("已复制，可直接粘贴到 notifications.json");
+        } catch {
+          alert("复制失败，请手动复制文本框内容");
+        }
+      }
+
+      get("channel-type").addEventListener("change", toggleFields);
+      get("builder-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        try {
+          showJson();
+        } catch (error) {
+          alert(error.message || String(error));
+        }
+      });
+      get("copy-btn").addEventListener("click", copyOutput);
+      get("sync-binding-btn").addEventListener("click", () => {
+        get("test-binding").value = get("binding-name").value.trim();
+      });
+
+      document.querySelectorAll("input[name='test-scope']").forEach((item) => {
+        item.addEventListener("change", toggleTestScope);
+      });
+
+      toggleFields();
+      toggleTestScope();
+
+      const form = get("test-form");
+      const result = get("result");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        result.textContent = "发送中...";
+        const scope = (document.querySelector("input[name='test-scope']:checked") || {}).value;
+        const payload = {
+          binding: scope === "all" ? "" : get("test-binding").value.trim(),
+          target: get("test-target").value.trim() || "manual-test",
+          severity: get("test-severity").value,
+          message: get("test-message").value.trim(),
+        };
+        try {
+          const res = await fetch("/api/alerts/test", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          result.textContent = JSON.stringify(
+            { ok: res.ok, status: res.status, data },
+            null,
+            2
+          );
+        } catch (error) {
+          result.textContent = String(error?.message || error);
+        }
+      });
+    </script>
+  </body>
+</html>

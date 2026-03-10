@@ -1,0 +1,174 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
+    <title>Server Live Board</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="breadcrumb">首页 > 仪表板 > 多服务器监控</div>
+      <div class="controls">
+        <label class="control">
+          刷新
+          <select id="refresh-interval">
+            <option value="5000">5s</option>
+            <option value="10000">10s</option>
+            <option value="30000">30s</option>
+            <option value="60000">60s</option>
+          </select>
+        </label>
+        <label class="control checkbox-control">
+          <input id="auto-refresh" type="checkbox" checked />
+          自动刷新
+        </label>
+        <label class="control">
+          状态
+          <select id="filter-status">
+            <option value="all">全部</option>
+            <option value="online">在线</option>
+            <option value="offline">离线</option>
+            <option value="alert">告警</option>
+          </select>
+        </label>
+        <input id="search-input" class="search-input" placeholder="搜索名称..." />
+        <label class="control">
+          排序
+          <select id="sort-by">
+            <option value="severity">按风险</option>
+            <option value="cpu">按 CPU</option>
+            <option value="mem">按内存</option>
+            <option value="disk">按磁盘</option>
+            <option value="name">按名称</option>
+          </select>
+        </label>
+        <label class="control">
+          字号
+          <select id="font-size">
+            <option value="small">小</option>
+            <option value="medium" selected>中</option>
+            <option value="large">大</option>
+          </select>
+        </label>
+        <button id="refresh-btn" class="button">立即刷新</button>
+      </div>
+    </header>
+    <div class="statusbar">
+      <div id="fetch-status" class="status-msg">准备就绪</div>
+      <div id="alert-config" class="status-time">阈值: -</div>
+      <div id="last-updated" class="status-time">-</div>
+    </div>
+
+    <main class="layout">
+      <section class="summary-grid" id="summary-grid">
+        <div class="card">
+          <div class="card-title">CPU 使用率</div>
+          <div class="card-value" id="sum-cpu">-</div>
+          <div class="card-sub" id="sum-cpu-sub">平均</div>
+        </div>
+        <div class="card">
+          <div class="card-title">内存使用率</div>
+          <div class="card-value" id="sum-mem">-</div>
+          <div class="card-sub" id="sum-mem-sub">平均</div>
+        </div>
+        <div class="card">
+          <div class="card-title">磁盘占用率</div>
+          <div class="card-value" id="sum-disk">-</div>
+          <div class="card-sub" id="sum-disk-sub">最大值</div>
+        </div>
+        <div class="card">
+          <div class="card-title">网络吞吐</div>
+          <div class="card-value" id="sum-net">-</div>
+          <div class="card-sub" id="sum-net-sub">RX / TX</div>
+        </div>
+        <div class="card">
+          <div class="card-title">服务故障数</div>
+          <div class="card-value" id="sum-failed">-</div>
+          <div class="card-sub">failed services</div>
+        </div>
+        <div class="card">
+          <div class="card-title">容器数量</div>
+          <div class="card-value" id="sum-docker">-</div>
+          <div class="card-sub">running containers</div>
+        </div>
+      </section>
+
+      <section class="charts-section">
+        <div class="charts-head">
+          <div class="charts-head-title">趋势图</div>
+          <label class="control">
+            图表区间
+            <select id="chart-bucket">
+              <option value="1m">每分钟</option>
+              <option value="30m">每30分钟</option>
+              <option value="1h">每小时</option>
+              <option value="1d">每天</option>
+            </select>
+          </label>
+        </div>
+        <div class="charts-grid">
+          <div class="chart-panel">
+            <div class="chart-title">CPU 平均使用率</div>
+            <div id="chart-cpu" class="chart"></div>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">内存平均使用率</div>
+            <div id="chart-mem" class="chart"></div>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">磁盘占用率（最大）</div>
+            <div id="chart-disk" class="chart"></div>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">网络吞吐（总）</div>
+            <div id="chart-net" class="chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="table-panel">
+        <div class="table-title">资源总览（点击行查看单机详情）</div>
+        <table>
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>状态</th>
+              <th>CPU</th>
+              <th>内存</th>
+              <th>磁盘</th>
+              <th>负载</th>
+              <th>网络</th>
+              <th>服务故障</th>
+              <th>Docker</th>
+              <th>错误</th>
+              <th>更新时间</th>
+            </tr>
+          </thead>
+          <tbody id="servers-table">
+            <tr><td colspan="11" class="muted">加载中...</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="detail-panel">
+        <div class="detail-head">
+          <div class="detail-title">单机详情</div>
+          <div id="detail-target" class="detail-target muted">未选择服务器</div>
+        </div>
+        <div id="detail-body" class="detail-body muted">点击上方任意服务器行查看详情</div>
+      </section>
+    </main>
+
+    <footer class="footerbar">
+      <span class="muted">需要调整告警绑定账号？</span>
+      <a class="button" href="/config.html">打开配置入口</a>
+    </footer>
+
+    <script src="/echarts/echarts.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

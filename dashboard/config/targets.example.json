@@ -1,0 +1,12 @@
+﻿[
+  {
+    "name": "server-01",
+    "url": "http://10.0.0.10:9101",
+    "token": "your_agent_token"
+  },
+  {
+    "name": "server-02",
+    "url": "http://10.0.0.11:9101",
+    "token": "your_agent_token"
+  }
+]

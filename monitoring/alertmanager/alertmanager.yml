@@ -1,0 +1,15 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: notify-bridge
+  group_by: [alertname, target, severity]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 15m
+
+receivers:
+  - name: notify-bridge
+    webhook_configs:
+      - url: http://notify-bridge:9300/api/alerts/webhook
+        send_resolved: true

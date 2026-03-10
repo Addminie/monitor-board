@@ -1,0 +1,13 @@
+﻿{
+  "name": "monitor-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "echarts": "^5.5.1",
+    "express": "^4.19.2"
+  }
+}

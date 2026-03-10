@@ -1,0 +1,83 @@
+groups:
+  - name: monitor-board-defaults
+    interval: 15s
+    rules:
+      - alert: TargetOffline
+        expr: up{job="monitor-agent"} == 0
+        for: 45s
+        labels:
+          severity: offline
+          source: monitor-board
+        annotations:
+          summary: "目标离线: {{ $labels.target }}"
+          description: "Prometheus 无法抓取 {{ $labels.target }} ({{ $labels.instance }}) 的 /metrics。"
+
+      - alert: HighCPUWarning
+        expr: monitor_cpu_usage_percent{job="monitor-agent"} >= 85
+        for: 2m
+        labels:
+          severity: warn
+          source: monitor-board
+        annotations:
+          summary: "CPU 预警: {{ $labels.target }}"
+          description: "CPU 使用率 {{ $value | printf \"%.1f\" }}% >= 85%。"
+
+      - alert: HighCPUDanger
+        expr: monitor_cpu_usage_percent{job="monitor-agent"} >= 95
+        for: 1m
+        labels:
+          severity: danger
+          source: monitor-board
+        annotations:
+          summary: "CPU 危险: {{ $labels.target }}"
+          description: "CPU 使用率 {{ $value | printf \"%.1f\" }}% >= 95%。"
+
+      - alert: HighMemoryWarning
+        expr: monitor_memory_usage_percent{job="monitor-agent"} >= 85
+        for: 2m
+        labels:
+          severity: warn
+          source: monitor-board
+        annotations:
+          summary: "内存预警: {{ $labels.target }}"
+          description: "内存使用率 {{ $value | printf \"%.1f\" }}% >= 85%。"
+
+      - alert: HighMemoryDanger
+        expr: monitor_memory_usage_percent{job="monitor-agent"} >= 95
+        for: 1m
+        labels:
+          severity: danger
+          source: monitor-board
+        annotations:
+          summary: "内存危险: {{ $labels.target }}"
+          description: "内存使用率 {{ $value | printf \"%.1f\" }}% >= 95%。"
+
+      - alert: HighDiskWarning
+        expr: max by (instance, target, env) (monitor_disk_usage_percent{job="monitor-agent"}) >= 80
+        for: 3m
+        labels:
+          severity: warn
+          source: monitor-board
+        annotations:
+          summary: "磁盘预警: {{ $labels.target }}"
+          description: "磁盘峰值占用 {{ $value | printf \"%.1f\" }}% >= 80%。"
+
+      - alert: HighDiskDanger
+        expr: max by (instance, target, env) (monitor_disk_usage_percent{job="monitor-agent"}) >= 90
+        for: 2m
+        labels:
+          severity: danger
+          source: monitor-board
+        annotations:
+          summary: "磁盘危险: {{ $labels.target }}"
+          description: "磁盘峰值占用 {{ $value | printf \"%.1f\" }}% >= 90%。"
+
+      - alert: ServiceFailure
+        expr: monitor_service_failed_total{job="monitor-agent"} >= 1
+        for: 90s
+        labels:
+          severity: danger
+          source: monitor-board
+        annotations:
+          summary: "服务故障: {{ $labels.target }}"
+          description: "失败服务数 {{ $value | printf \"%.0f\" }} >= 1。"

@@ -1,0 +1,24 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Logs
+*.log
+*.err.log
+
+# Local runtime files
+.local-pids.txt
+
+# Secrets / local config
+.env
+.env.*
+dashboard/config/targets.json
+dashboard/config/alerts.json
+dashboard/config/notifications.json
+
+# Large local installer
+DockerDesktopInstaller.exe
+
+# OS
+.DS_Store
+Thumbs.db

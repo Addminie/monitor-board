@@ -1,0 +1,37 @@
+{
+  "enabled": false,
+  "cooldownSec": 300,
+  "remindIntervalSec": 0,
+  "bindings": [
+    {
+      "name": "ops-all",
+      "enabled": true,
+      "targets": ["*"],
+      "severities": ["offline", "danger"],
+      "notifyRecover": true,
+      "channels": [
+        {
+          "type": "wechat",
+          "name": "wechat-ops",
+          "webhook": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY",
+          "mentionedMobileList": [],
+          "mentionedList": []
+        },
+        {
+          "type": "telegram",
+          "name": "telegram-ops",
+          "botToken": "123456:YOUR_BOT_TOKEN",
+          "chatId": "-1001234567890"
+        },
+        {
+          "type": "dingtalk",
+          "name": "dingtalk-ops",
+          "webhook": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN",
+          "secret": "SECxxxx",
+          "atMobiles": [],
+          "isAtAll": false
+        }
+      ]
+    }
+  ]
+}

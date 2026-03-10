@@ -1,0 +1,6 @@
+{
+  "cpu": { "warn": 85, "danger": 95 },
+  "mem": { "warn": 85, "danger": 95 },
+  "disk": { "warn": 80, "danger": 90 },
+  "serviceFailedDanger": 1
+}

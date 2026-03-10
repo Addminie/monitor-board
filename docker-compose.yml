@@ -1,0 +1,35 @@
+services:
+  agent-local:
+    build:
+      context: ./agent
+    container_name: monitor-agent-local
+    environment:
+      PORT: "9101"
+      AGENT_TOKEN: "123456"
+    ports:
+      - "9101:9101"
+    restart: unless-stopped
+    networks:
+      - monitor-net
+
+  dashboard:
+    build:
+      context: ./dashboard
+    container_name: monitor-dashboard
+    depends_on:
+      - agent-local
+    environment:
+      PORT: "9200"
+      REQUEST_TIMEOUT_MS: "3000"
+    volumes:
+      - ./dashboard/config/targets.docker.example.json:/app/config/targets.json:ro
+      - ./dashboard/config/notifications.example.json:/app/config/notifications.json:ro
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+    networks:
+      - monitor-net
+
+networks:
+  monitor-net:
+    driver: bridge
