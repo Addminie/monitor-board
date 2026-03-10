@@ -480,3 +480,9 @@ curl -X POST http://127.0.0.1:9300/api/alerts/test \
   -H "Content-Type: application/json" \
   -d '{"severity":"danger","target":"manual-test","message":"bridge test"}'
 ```
+
+---
+
+## 12. 程序页面截图
+
+![程序页面截图](docs/images/dashboard-page.png)
