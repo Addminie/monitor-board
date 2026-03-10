@@ -870,7 +870,10 @@ npm run test:all
   - 使用 SSH 到目标机器执行 `docker compose pull && up -d`
 - `.github/workflows/auto-release.yml`
   - 每次合并/推送到 `main` 自动发版
-  - 版本号规则：读取最新 `vX.Y.Z`，自动生成下一个补丁版本 `vX.Y.(Z+1)`
+  - 版本号规则（按 PR label 决定）：
+    - `release:major` / `semver:major` -> `v(X+1).0.0`
+    - `release:minor` / `semver:minor` -> `vX.(Y+1).0`
+    - `release:patch` / `semver:patch` 或无 label -> `vX.Y.(Z+1)`
   - 自动创建 Git tag + GitHub Release（自动生成发布说明）
 
 详细说明见：`docs/CI_CD.md`

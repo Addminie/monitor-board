@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
   group: auto-release-main
@@ -27,6 +28,37 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Detect release bump from PR labels
+        id: bump
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const commitSha = context.sha;
+
+            const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: commitSha,
+            });
+
+            const mergedPr = (prs.data || []).find((pr) => pr.merged_at) || null;
+            const labels = mergedPr
+              ? (mergedPr.labels || []).map((item) => String(item.name || "").trim().toLowerCase())
+              : [];
+
+            const has = (names) => names.some((name) => labels.includes(name));
+            let bump = "patch";
+            if (has(["release:major", "semver:major"])) bump = "major";
+            else if (has(["release:minor", "semver:minor"])) bump = "minor";
+            else if (has(["release:patch", "semver:patch"])) bump = "patch";
+
+            core.info(`Detected bump=${bump}; labels=${labels.join(",") || "-"}`);
+            core.setOutput("bump", bump);
+            core.setOutput("pr_number", mergedPr ? String(mergedPr.number) : "");
+            core.setOutput("labels", labels.join(","));
+
       - name: Compute next version tag
         id: version
         shell: bash
@@ -43,6 +75,10 @@ jobs:
           fi
 
           latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          bump="${{ steps.bump.outputs.bump }}"
+          if [[ -z "$bump" ]]; then
+            bump="patch"
+          fi
           if [[ -z "$latest_tag" ]]; then
             next_tag="v1.0.0"
           else
@@ -53,10 +89,17 @@ jobs:
             major="${BASH_REMATCH[1]}"
             minor="${BASH_REMATCH[2]}"
             patch="${BASH_REMATCH[3]}"
-            next_tag="v${major}.${minor}.$((patch + 1))"
+            if [[ "$bump" == "major" ]]; then
+              next_tag="v$((major + 1)).0.0"
+            elif [[ "$bump" == "minor" ]]; then
+              next_tag="v${major}.$((minor + 1)).0"
+            else
+              next_tag="v${major}.${minor}.$((patch + 1))"
+            fi
           fi
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
           echo "tag=$next_tag" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
@@ -71,4 +114,11 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
+          body: |
+            Auto release from `${{ github.sha }}`.
+            - bump: `${{ steps.version.outputs.bump }}`
+            - source PR: `${{ steps.bump.outputs.pr_number || 'direct-push' }}`
+            - labels: `${{ steps.bump.outputs.labels || '-' }}`
+            
+            ---
           generate_release_notes: true

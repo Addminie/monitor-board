@@ -15,8 +15,16 @@
 - `auto-release.yml`
   - Trigger: every `push` to `main` (including merge commits)
   - Action:
-    - read latest semver tag (`vX.Y.Z`)
-    - auto create next patch tag (`vX.Y.(Z+1)`)
+    - read PR labels from the merge commit (if matched PR exists)
+    - compute semver bump by labels:
+      - `release:major` / `semver:major` -> `major`
+      - `release:minor` / `semver:minor` -> `minor`
+      - `release:patch` / `semver:patch` -> `patch`
+      - no label -> default `patch`
+    - read latest semver tag (`vX.Y.Z`) and create next tag:
+      - major -> `v(X+1).0.0`
+      - minor -> `vX.(Y+1).0`
+      - patch -> `vX.Y.(Z+1)`
     - push tag to origin
     - publish GitHub Release with generated notes
   - Skip rule: if current commit already has a semver tag, workflow will skip auto tagging
