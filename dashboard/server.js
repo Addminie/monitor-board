@@ -120,6 +120,25 @@ const MESSAGE_TEMPLATE_PRESETS = {
 };
 
 const TARGET_META_FIELDS = ["env", "business", "room", "owner"];
+const TARGET_DEVICE_FIELDS = [
+  "managementIp",
+  "mac",
+  "subnetMask",
+  "managementStatus",
+  "managementMode",
+  "vendor",
+  "model",
+  "os",
+];
+const TARGET_DEVICE_ALIAS_FIELDS = [
+  "managementIP",
+  "mgmtIp",
+  "ip",
+  "netmask",
+  "managementState",
+  "manageStatus",
+  "manageMode",
+];
 
 const SEVERITY_RANK = {
   ok: 0,
@@ -657,6 +676,16 @@ function validateTargetsConfig(raw) {
         errors.push(`${base}.${field} must be a string`);
       }
     });
+    TARGET_DEVICE_FIELDS.forEach((field) => {
+      if (item[field] != null && typeof item[field] !== "string") {
+        errors.push(`${base}.${field} must be a string`);
+      }
+    });
+    TARGET_DEVICE_ALIAS_FIELDS.forEach((field) => {
+      if (item[field] != null && typeof item[field] !== "string") {
+        errors.push(`${base}.${field} must be a string`);
+      }
+    });
   });
   return { ok: errors.length === 0, errors };
 }
@@ -949,18 +978,72 @@ function normalizeTargetMetadata(target) {
   return metadata;
 }
 
+function normalizeTargetDeviceValue(input) {
+  return String(input || "").trim();
+}
+
+function extractHostnameFromUrl(inputUrl) {
+  const raw = String(inputUrl || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw.includes("://") ? raw : `http://${raw}`);
+    return String(parsed.hostname || "").trim();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function normalizeTargetDeviceInfo(target) {
+  const managementIp =
+    normalizeTargetDeviceValue(target?.managementIp) ||
+    normalizeTargetDeviceValue(target?.managementIP) ||
+    normalizeTargetDeviceValue(target?.mgmtIp) ||
+    normalizeTargetDeviceValue(target?.ip) ||
+    extractHostnameFromUrl(target?.url);
+  const subnetMask =
+    normalizeTargetDeviceValue(target?.subnetMask) ||
+    normalizeTargetDeviceValue(target?.netmask);
+  const managementStatus =
+    normalizeTargetDeviceValue(target?.managementStatus) ||
+    normalizeTargetDeviceValue(target?.managementState) ||
+    normalizeTargetDeviceValue(target?.manageStatus);
+  const managementMode =
+    normalizeTargetDeviceValue(target?.managementMode) ||
+    normalizeTargetDeviceValue(target?.manageMode);
+  return {
+    managementIp,
+    mac: normalizeTargetDeviceValue(target?.mac),
+    subnetMask,
+    managementStatus,
+    managementMode,
+    vendor: normalizeTargetDeviceValue(target?.vendor),
+    model: normalizeTargetDeviceValue(target?.model),
+    os: normalizeTargetDeviceValue(target?.os),
+  };
+}
+
 function normalizeTarget(target) {
   if (!target) return null;
   const name = String(target.name || "").trim();
   const url = String(target.url || "").trim();
   if (!url) return null;
   const metadata = normalizeTargetMetadata(target);
+  const device = normalizeTargetDeviceInfo(target);
   return {
     name: name || url,
     url,
     token: String(target.token || "").trim(),
     metadata,
     tags: metadata,
+    device,
+    managementIp: device.managementIp,
+    mac: device.mac,
+    subnetMask: device.subnetMask,
+    managementStatus: device.managementStatus,
+    managementMode: device.managementMode,
+    vendor: device.vendor,
+    model: device.model,
+    os: device.os,
   };
 }
 
@@ -1943,6 +2026,7 @@ async function collectTargetStatuses(targets) {
           url: target.url,
           metadata: target.metadata || {},
           tags: target.metadata || {},
+          device: target.device || {},
           status: data,
           error: null,
           fetchedAt: new Date().toISOString(),
@@ -1953,6 +2037,7 @@ async function collectTargetStatuses(targets) {
           url: target.url,
           metadata: target.metadata || {},
           tags: target.metadata || {},
+          device: target.device || {},
           status: null,
           error: error?.message || "fetch failed",
           fetchedAt: new Date().toISOString(),
@@ -1966,7 +2051,12 @@ async function collectTargetStatuses(targets) {
 function buildTargetSignature(targets) {
   if (!Array.isArray(targets) || !targets.length) return "";
   return targets
-    .map((item) => `${item.url || ""}|${item.token || ""}|${item.name || ""}`)
+    .map(
+      (item) =>
+        `${item.url || ""}|${item.token || ""}|${item.name || ""}|${item.device?.managementIp || ""}|${
+          item.device?.managementStatus || ""
+        }`
+    )
     .sort((a, b) => a.localeCompare(b))
     .join("||");
 }
@@ -3088,6 +3178,7 @@ app.get("/api/targets", requireRole("readonly"), (req, res) => {
     url: item.url,
     metadata: item.metadata || {},
     tags: item.metadata || {},
+    device: item.device || {},
   }));
   const paginationQuery = parsePaginationQuery(req.query, {
     defaultPageSize: Math.max(20, Math.min(200, targets.length || 50)),
@@ -3422,6 +3513,14 @@ app.get("/api/targets/export", requireRole("admin"), (req, res) => {
       business: target.metadata?.business || "",
       room: target.metadata?.room || "",
       owner: target.metadata?.owner || "",
+      managementIp: target.device?.managementIp || "",
+      mac: target.device?.mac || "",
+      subnetMask: target.device?.subnetMask || "",
+      managementStatus: target.device?.managementStatus || "",
+      managementMode: target.device?.managementMode || "",
+      vendor: target.device?.vendor || "",
+      model: target.device?.model || "",
+      os: target.device?.os || "",
     }));
   const paginationQuery = parsePaginationQuery(req.query, {
     defaultPageSize: Math.max(20, Math.min(500, targets.length || 50)),

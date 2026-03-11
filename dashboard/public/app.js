@@ -21,9 +21,13 @@ const DEFAULT_ALERTS = {
 };
 const TARGET_META_FIELDS = ["env", "business", "room", "owner"];
 const MAX_SAVED_VIEWS = 20;
+const DEFAULT_KEY_SERVICES = ["nginx", "mysql", "redis", "docker"];
 const DETAIL_SECTION_KEYS = [
   "metadata",
+  "device-info",
   "root-cause",
+  "cpu-monitor",
+  "memory-monitor",
   "services",
   "service-failures",
   "system",
@@ -55,7 +59,38 @@ const STORAGE_KEYS = {
   detailCollapsed: "monitor.detailCollapsed",
   topControlsCollapsed: "monitor.topControlsCollapsed",
   detailTab: "monitor.detailTab",
+  keyServices: "monitor.keyServices",
 };
+
+function normalizeServiceKeyword(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeServiceKeywordList(input) {
+  const source = Array.isArray(input) ? input : String(input || "").split(",");
+  const seen = new Set();
+  return source
+    .map((item) => normalizeServiceKeyword(item))
+    .filter(Boolean)
+    .filter((item) => {
+      if (seen.has(item)) return false;
+      seen.add(item);
+      return true;
+    });
+}
+
+function loadKeyServicesFromStorage() {
+  const raw = String(localStorage.getItem(STORAGE_KEYS.keyServices) || "").trim();
+  if (!raw) return DEFAULT_KEY_SERVICES.slice();
+  try {
+    const parsed = JSON.parse(raw);
+    const normalized = normalizeServiceKeywordList(parsed);
+    return normalized.length ? normalized : DEFAULT_KEY_SERVICES.slice();
+  } catch (_error) {
+    const normalized = normalizeServiceKeywordList(raw);
+    return normalized.length ? normalized : DEFAULT_KEY_SERVICES.slice();
+  }
+}
 
 function loadSavedViewsFromStorage() {
   const raw = String(localStorage.getItem(STORAGE_KEYS.savedViews) || "").trim();
@@ -169,6 +204,7 @@ const state = {
   detailCollapsed: loadDetailCollapsedFromStorage(),
   topControlsCollapsed: loadTopControlsCollapsedFromStorage(),
   detailTab: localStorage.getItem(STORAGE_KEYS.detailTab) || "overview",
+  keyServices: loadKeyServicesFromStorage(),
 };
 
 const elements = {
@@ -216,6 +252,12 @@ const elements = {
   tableQuickAlert: document.getElementById("table-quick-alert"),
   tableQuickOnline: document.getElementById("table-quick-online"),
   tableClearSearch: document.getElementById("table-clear-search"),
+  keyServiceInput: document.getElementById("key-service-input"),
+  keyServiceApplyBtn: document.getElementById("key-service-apply-btn"),
+  keyServiceResetBtn: document.getElementById("key-service-reset-btn"),
+  keyServiceTarget: document.getElementById("key-service-target"),
+  keyServiceSummary: document.getElementById("key-service-summary"),
+  keyServiceList: document.getElementById("key-service-list"),
   detailTarget: document.getElementById("detail-target"),
   detailBody: document.getElementById("detail-body"),
   detailExpandAllBtn: document.getElementById("detail-expand-all-btn"),
@@ -294,6 +336,13 @@ function escapeHtml(input) {
 function formatPercent(value) {
   if (!Number.isFinite(value)) return "-";
   return `${value.toFixed(1)}%`;
+}
+
+function formatLoadAverage(loadAvg, index = 0) {
+  if (!Array.isArray(loadAvg)) return "-";
+  const value = Number(loadAvg[index]);
+  if (!Number.isFinite(value)) return "-";
+  return value.toFixed(2);
 }
 
 function formatBytes(bytes) {
@@ -425,6 +474,46 @@ function normalizeMetadata(input) {
     metadata[field] = normalizeMetaValue(value);
   });
   return metadata;
+}
+
+function extractHostFromUrl(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw.includes("://") ? raw : `http://${raw}`);
+    return String(parsed.hostname || "").trim();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function normalizeDeviceInfo(input, serverUrl = "") {
+  const source = input && typeof input === "object" ? input : {};
+  const managementIp =
+    normalizeMetaValue(source.managementIp) ||
+    normalizeMetaValue(source.managementIP) ||
+    normalizeMetaValue(source.mgmtIp) ||
+    normalizeMetaValue(source.ip) ||
+    extractHostFromUrl(serverUrl);
+  const subnetMask =
+    normalizeMetaValue(source.subnetMask) || normalizeMetaValue(source.netmask);
+  const managementStatus =
+    normalizeMetaValue(source.managementStatus) ||
+    normalizeMetaValue(source.managementState) ||
+    normalizeMetaValue(source.manageStatus);
+  const managementMode =
+    normalizeMetaValue(source.managementMode) ||
+    normalizeMetaValue(source.manageMode);
+  return {
+    managementIp,
+    mac: normalizeMetaValue(source.mac),
+    subnetMask,
+    managementStatus,
+    managementMode,
+    vendor: normalizeMetaValue(source.vendor),
+    model: normalizeMetaValue(source.model),
+    os: normalizeMetaValue(source.os),
+  };
 }
 
 function getMetaFilterState(field) {
@@ -757,7 +846,16 @@ function applyDetailTabVisibility() {
   const sectionWhitelist = {
     overview: null,
     alerts: new Set(["root-cause", "services", "service-failures", "unreachable"]),
-    system: new Set(["metadata", "system", "disk", "docker", "tcp"]),
+    system: new Set([
+      "cpu-monitor",
+      "memory-monitor",
+      "device-info",
+      "metadata",
+      "system",
+      "disk",
+      "docker",
+      "tcp",
+    ]),
   };
   const cardWhitelist = {
     overview: null,
@@ -820,6 +918,86 @@ function setFilterStatusAndRender(nextStatus) {
   }
   markViewAsCustom();
   render(state.lastServers, false);
+}
+
+function persistKeyServices() {
+  localStorage.setItem(STORAGE_KEYS.keyServices, JSON.stringify(state.keyServices || []));
+}
+
+function summarizeServiceKeyword(status, keyword) {
+  const items = Array.isArray(status?.services?.items) ? status.services.items : [];
+  const matched = items.filter((item) =>
+    normalizeServiceKeyword(item?.name).includes(normalizeServiceKeyword(keyword))
+  );
+  if (!matched.length) {
+    return {
+      level: "na",
+      summary: "未发现",
+      detail: `未找到名称包含 ${keyword} 的进程/服务`,
+    };
+  }
+  const runningCount = matched.filter((item) => {
+    const active = normalizeServiceKeyword(item?.active);
+    return (active === "running" || active === "active") && !isServiceFailure(item);
+  }).length;
+  const failedCount = matched.filter((item) => isServiceFailure(item)).length;
+  const sample = matched
+    .slice(0, 3)
+    .map((item) => `${item?.name || "-"}:${localizeServiceState(item?.active)}`)
+    .join(", ");
+  if (failedCount > 0) {
+    return {
+      level: "danger",
+      summary: `异常 ${failedCount}/${matched.length}`,
+      detail: sample || "存在故障状态",
+    };
+  }
+  if (runningCount > 0) {
+    return {
+      level: "ok",
+      summary: `运行 ${runningCount}/${matched.length}`,
+      detail: sample || "运行中",
+    };
+  }
+  return {
+    level: "warn",
+    summary: `未运行 0/${matched.length}`,
+    detail: sample || "未运行",
+  };
+}
+
+function renderKeyServiceStatus(server) {
+  if (!elements.keyServiceList || !elements.keyServiceSummary || !elements.keyServiceTarget) return;
+  const keywords = Array.isArray(state.keyServices) && state.keyServices.length
+    ? state.keyServices
+    : DEFAULT_KEY_SERVICES;
+  if (!server || !server.status) {
+    elements.keyServiceTarget.textContent = "目标主机：-";
+    elements.keyServiceSummary.textContent = "当前未选中在线主机，显示默认关键进程列表。";
+    elements.keyServiceList.innerHTML = keywords
+      .map(
+        (item) =>
+          `<div class="key-service-item"><span class="key-service-name">${escapeHtml(
+            item
+          )}</span>${makeBadge("na", "无数据")}<span class="muted">-</span></div>`
+      )
+      .join("");
+    return;
+  }
+
+  elements.keyServiceTarget.textContent = `目标主机：${server.name}`;
+  const stats = { ok: 0, warn: 0, danger: 0, na: 0 };
+  const lines = keywords.map((keyword) => {
+    const result = summarizeServiceKeyword(server.status, keyword);
+    stats[result.level] = (stats[result.level] || 0) + 1;
+    return `<div class="key-service-item">
+      <span class="key-service-name">${escapeHtml(keyword)}</span>
+      ${makeBadge(result.level, result.summary)}
+      <span class="muted">${escapeHtml(result.detail)}</span>
+    </div>`;
+  });
+  elements.keyServiceSummary.textContent = `正常 ${stats.ok} | 告警 ${stats.danger} | 未运行 ${stats.warn} | 未发现 ${stats.na}`;
+  elements.keyServiceList.innerHTML = lines.join("");
 }
 
 function getCurrentSelectedServer() {
@@ -2220,6 +2398,59 @@ function renderMetadataContent(server) {
   return renderMiniTable(["字段", "值"], rows, "无标签数据");
 }
 
+function renderDeviceInfoContent(server) {
+  const device = normalizeDeviceInfo(server?.device || {}, server?.url || "");
+  const statusText = device.managementStatus || (server?.status ? "\u5728\u7ebf" : "\u79bb\u7ebf");
+  const modeText = device.managementMode || "\u672a\u914d\u7f6e";
+  const osText =
+    device.os ||
+    `${server?.status?.system?.platform || ""} ${server?.status?.system?.release || ""}`.trim() ||
+    "-";
+  const rows = [
+    ["\u540d\u79f0", server?.name || "-"],
+    ["\u7ba1\u7406IP", device.managementIp || "-"],
+    ["MAC\u5730\u5740", device.mac || "-"],
+    ["\u5b50\u7f51\u63a9\u7801", device.subnetMask || "-"],
+    ["\u7ba1\u7406\u72b6\u6001", statusText],
+    ["\u7ba1\u7406\u65b9\u5f0f", modeText],
+    ["\u5382\u5546", device.vendor || "-"],
+    ["\u578b\u53f7", device.model || "-"],
+    ["\u64cd\u4f5c\u7cfb\u7edf", osText],
+  ];
+  return renderMiniTable(["\u5b57\u6bb5", "\u503c"], rows, "\u65e0\u8bbe\u5907\u4fe1\u606f");
+}
+
+function renderCpuMonitorContent(status) {
+  const loadAvg = Array.isArray(status?.system?.loadAvg) ? status.system.loadAvg : [];
+  const rows = [
+    ["CPU \u4f7f\u7528\u7387", formatPercent(status?.cpu?.usagePercent)],
+    ["\u5e73\u5747\u8d1f\u8f7d(1m)", formatLoadAverage(loadAvg, 0)],
+    ["\u5e73\u5747\u8d1f\u8f7d(5m)", formatLoadAverage(loadAvg, 1)],
+    ["\u5e73\u5747\u8d1f\u8f7d(15m)", formatLoadAverage(loadAvg, 2)],
+    [
+      "CPU \u6838\u5fc3\u6570",
+      Number.isFinite(Number(status?.cpu?.cores)) ? String(status.cpu.cores) : "-",
+    ],
+    ["CPU \u578b\u53f7", String(status?.cpu?.model || "-")],
+  ];
+  return renderMiniTable(["\u6307\u6807", "\u503c"], rows, "\u65e0 CPU \u6570\u636e");
+}
+
+function renderMemoryMonitorContent(status) {
+  const memory = status?.memory || {};
+  const rows = [
+    ["\u5185\u5b58\u603b\u91cf", formatBytes(Number(memory.total))],
+    ["\u5df2\u7528\u5185\u5b58", formatBytes(Number(memory.used))],
+    ["\u7a7a\u95f2\u5185\u5b58", formatBytes(Number(memory.free))],
+    ["\u5185\u5b58\u4f7f\u7528\u7387", formatPercent(Number(memory.usagePercent))],
+    ["Swap \u603b\u91cf", formatBytes(Number(memory.swapTotal))],
+    ["Swap \u5df2\u7528", formatBytes(Number(memory.swapUsed))],
+    ["Swap \u7a7a\u95f2", formatBytes(Number(memory.swapFree))],
+    ["Swap \u4f7f\u7528\u7387", formatPercent(Number(memory.swapPercent))],
+  ];
+  return renderMiniTable(["\u6307\u6807", "\u503c"], rows, "\u65e0\u5185\u5b58\u6570\u636e");
+}
+
 function renderDetail(server) {
   if (!elements.detailBody || !elements.detailTarget) return;
   if (!server) {
@@ -2237,17 +2468,20 @@ function renderDetail(server) {
     elements.detailBody.className = "detail-body";
     const unreachableContent = `
       <div class="error-text">${escapeHtml(server.error || "unknown error")}</div>
-      <div class="muted">最后检查: ${escapeHtml(formatTime(server.fetchedAt))}</div>`;
+      <div class="muted">\u6700\u540e\u68c0\u67e5 ${escapeHtml(formatTime(server.fetchedAt))}</div>`;
     elements.detailBody.innerHTML = `
       <div class="detail-sections">
-        ${renderCollapsibleDetailBlock("unreachable", "目标不可达", unreachableContent, {
-          summary: `检查时间 ${formatTime(server.fetchedAt)}`,
+        ${renderCollapsibleDetailBlock("unreachable", "\u76ee\u6807\u4e0d\u53ef\u8fbe", unreachableContent, {
+          summary: `\u68c0\u67e5\u65f6\u95f4 ${formatTime(server.fetchedAt)}`,
           defaultCollapsed: false,
         })}
-        ${renderCollapsibleDetailBlock("root-cause", "故障原因详情", renderRootCauseContent(server), {
+        ${renderCollapsibleDetailBlock("root-cause", "\u6545\u969c\u539f\u56e0\u8be6\u60c5", renderRootCauseContent(server), {
           defaultCollapsed: false,
         })}
-        ${renderCollapsibleDetailBlock("metadata", "目标标签", renderMetadataContent(server), {
+        ${renderCollapsibleDetailBlock("device-info", "\u8bbe\u5907\u4fe1\u606f", renderDeviceInfoContent(server), {
+          defaultCollapsed: false,
+        })}
+        ${renderCollapsibleDetailBlock("metadata", "\u76ee\u6807\u6807\u7b7e", renderMetadataContent(server), {
           defaultCollapsed: true,
         })}
       </div>
@@ -2256,6 +2490,7 @@ function renderDetail(server) {
   }
 
   const status = server.status;
+  const loadAvg = Array.isArray(status.system?.loadAvg) ? status.system.loadAvg : [];
   const diskItems = Array.isArray(status.disk?.items) ? status.disk.items.slice(0, 8) : [];
   const serviceItems = Array.isArray(status.services?.items)
     ? status.services.items.slice(0, 8)
@@ -2289,7 +2524,7 @@ function renderDetail(server) {
       ["\u7cfb\u7edf", `${status.system?.platform || "-"} ${status.system?.release || ""}`.trim()],
       ["\u67b6\u6784", status.system?.arch || "-"],
       ["Node", status.process?.node || "-"],
-      ["\u8d1f\u8f7d(1m)", Array.isArray(status.system?.loadAvg) ? String(status.system.loadAvg[0] ?? "-") : "-"],
+      ["\u8d1f\u8f7d(1m)", formatLoadAverage(loadAvg, 0)],
       ["\u672c\u5730\u65f6\u95f4", status.system?.localTime || "-"],
     ],
     "\u65e0\u7cfb\u7edf\u6570\u636e"
@@ -2318,6 +2553,14 @@ function renderDetail(server) {
         <span class="service-text-off">停止/禁用</span>
       </div>`;
 
+  const cpuSummary = `\u4f7f\u7528\u7387 ${formatPercent(status.cpu?.usagePercent)} / \u8d1f\u8f7d(1m) ${formatLoadAverage(
+    loadAvg,
+    0
+  )}`;
+  const memorySummary = `\u5185\u5b58 ${formatPercent(status.memory?.usagePercent)} / Swap ${formatPercent(
+    status.memory?.swapPercent
+  )}`;
+
   elements.detailBody.className = "detail-body";
   elements.detailBody.innerHTML = `
     <div class="detail-grid">
@@ -2340,6 +2583,18 @@ function renderDetail(server) {
     </div>
     <div class="detail-sections">
       ${renderCollapsibleDetailBlock("root-cause", "故障原因详情", renderRootCauseContent(server), {
+        defaultCollapsed: false,
+      })}
+      ${renderCollapsibleDetailBlock("cpu-monitor", "CPU \u76d1\u63a7", renderCpuMonitorContent(status), {
+        summary: cpuSummary,
+        defaultCollapsed: false,
+      })}
+      ${renderCollapsibleDetailBlock("memory-monitor", "\u5185\u5b58\u76d1\u63a7", renderMemoryMonitorContent(status), {
+        summary: memorySummary,
+        defaultCollapsed: false,
+      })}
+      ${renderCollapsibleDetailBlock("device-info", "\u8bbe\u5907\u4fe1\u606f", renderDeviceInfoContent(server), {
+        summary: `${server.device?.managementIp || "-"} / ${server.device?.managementStatus || (server.status ? "\u5728\u7ebf" : "\u79bb\u7ebf")}`,
         defaultCollapsed: false,
       })}
       ${renderCollapsibleDetailBlock("services", "服务状态", `${serviceLegend}${serviceTable}`, {
@@ -2373,6 +2628,7 @@ function renderDetail(server) {
 function mapServer(entry, index) {
   const id = String(entry?.url || entry?.name || `target-${index}`) + `#${index}`;
   const metadata = normalizeMetadata(entry?.metadata || entry?.tags || entry || {});
+  const device = normalizeDeviceInfo(entry?.device || entry || {}, entry?.url || "");
   const logUrl = normalizeMetaValue(entry?.logUrl || entry?.metadata?.logUrl || entry?.tags?.logUrl);
   if (!entry || !entry.status) {
     return {
@@ -2381,6 +2637,7 @@ function mapServer(entry, index) {
       name: entry?.name || entry?.url || "-",
       logUrl,
       metadata,
+      device,
       status: null,
       fetchedAt: entry?.fetchedAt,
       error: entry?.error || "\u76ee\u6807\u4e0d\u53ef\u8fbe",
@@ -2398,6 +2655,7 @@ function mapServer(entry, index) {
     name: entry.name || status.system?.hostname || entry.url,
     logUrl,
     metadata,
+    device,
     status,
     fetchedAt: entry.fetchedAt,
     error: null,
@@ -2676,6 +2934,7 @@ function render(servers, appendSeries = false) {
   renderTable(visibleServers);
   setTableSummary(visibleServers);
   updateQuickFilterButtons();
+  renderKeyServiceStatus(selected);
   renderSummary(visibleServers);
   setFreshnessSummary(servers);
   renderRiskTop(visibleServers);
@@ -2864,6 +3123,45 @@ function bindControls() {
       state.search = String(event.target.value || "");
       markViewAsCustom();
       render(state.lastServers, false);
+    });
+  }
+
+  if (elements.keyServiceInput) {
+    elements.keyServiceInput.value = (state.keyServices || []).join(",");
+    elements.keyServiceInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const next = normalizeServiceKeywordList(elements.keyServiceInput.value);
+      state.keyServices = next.length ? next : DEFAULT_KEY_SERVICES.slice();
+      elements.keyServiceInput.value = state.keyServices.join(",");
+      persistKeyServices();
+      render(state.lastServers, false);
+    });
+  }
+
+  if (elements.keyServiceApplyBtn) {
+    elements.keyServiceApplyBtn.addEventListener("click", () => {
+      const raw = elements.keyServiceInput ? elements.keyServiceInput.value : "";
+      const next = normalizeServiceKeywordList(raw);
+      state.keyServices = next.length ? next : DEFAULT_KEY_SERVICES.slice();
+      if (elements.keyServiceInput) {
+        elements.keyServiceInput.value = state.keyServices.join(",");
+      }
+      persistKeyServices();
+      render(state.lastServers, false);
+      setStatus(`已更新关键进程：${state.keyServices.join(", ")}`, "ok");
+    });
+  }
+
+  if (elements.keyServiceResetBtn) {
+    elements.keyServiceResetBtn.addEventListener("click", () => {
+      state.keyServices = DEFAULT_KEY_SERVICES.slice();
+      if (elements.keyServiceInput) {
+        elements.keyServiceInput.value = state.keyServices.join(",");
+      }
+      persistKeyServices();
+      render(state.lastServers, false);
+      setStatus("关键进程已重置为默认值", "ok");
     });
   }
 
@@ -3068,6 +3366,8 @@ async function start() {
   state.chartBucket = normalizeChartBucket(state.chartBucket);
   state.incidentFilter = normalizeIncidentFilter(state.incidentFilter);
   state.detailTab = normalizeDetailTab(state.detailTab);
+  state.keyServices = normalizeServiceKeywordList(state.keyServices);
+  if (!state.keyServices.length) state.keyServices = DEFAULT_KEY_SERVICES.slice();
   const activeView = findSavedViewById(state.activeSavedViewId);
   if (activeView) {
     applyViewFilters(activeView.filters);

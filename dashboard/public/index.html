@@ -200,7 +200,53 @@
         </div>
       </section>
 
-      <section class="workspace-grid">
+      <section class="charts-section">
+        <div class="charts-head">
+          <div class="charts-head-title">趋势图</div>
+          <div class="muted">图表区间由顶部“采集设置”控制</div>
+        </div>
+        <div class="charts-grid">
+          <div class="chart-panel">
+            <div class="chart-title">CPU 平均使用率</div>
+            <div id="chart-cpu" class="chart"></div>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">内存平均使用率</div>
+            <div id="chart-mem" class="chart"></div>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">磁盘占用率（最大）</div>
+            <div id="chart-disk" class="chart"></div>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">网络吞吐（总）</div>
+            <div id="chart-net" class="chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="priority-grid">
+        <section class="key-services-panel" aria-label="关键进程状态">
+          <div class="key-services-head">
+            <div>
+              <div class="table-title">关键进程状态</div>
+              <div id="key-service-target" class="muted">目标主机：-</div>
+            </div>
+            <div class="key-services-actions">
+              <input
+                id="key-service-input"
+                class="search-input key-service-input"
+                placeholder="进程名（逗号分隔），如 nginx,mysql,redis"
+                aria-label="关键进程列表"
+              />
+              <button id="key-service-apply-btn" class="button" type="button">应用</button>
+              <button id="key-service-reset-btn" class="button" type="button">重置默认</button>
+            </div>
+          </div>
+          <div id="key-service-summary" class="muted">-</div>
+          <div id="key-service-list" class="key-service-list"></div>
+        </section>
+
         <section class="incident-panel">
           <div class="incident-head">
             <div>
@@ -241,84 +287,61 @@
         </section>
       </section>
 
-      <section class="charts-section">
-        <div class="charts-head">
-          <div class="charts-head-title">趋势图</div>
-          <div class="muted">图表区间由顶部“采集设置”控制</div>
-        </div>
-        <div class="charts-grid">
-          <div class="chart-panel">
-            <div class="chart-title">CPU 平均使用率</div>
-            <div id="chart-cpu" class="chart"></div>
+      <section class="ops-main-grid">
+        <section class="table-panel" aria-label="资源总览">
+          <div class="table-head">
+            <div>
+              <div class="table-title">资源总览（点击行查看单机详情）</div>
+              <div id="table-summary" class="muted">-</div>
+            </div>
+            <div class="table-toolbar" aria-label="快捷筛选">
+              <button id="table-quick-all" class="button" type="button">全部</button>
+              <button id="table-quick-alert" class="button" type="button">仅故障</button>
+              <button id="table-quick-online" class="button" type="button">仅在线</button>
+              <button id="table-clear-search" class="button" type="button">清空搜索</button>
+            </div>
           </div>
-          <div class="chart-panel">
-            <div class="chart-title">内存平均使用率</div>
-            <div id="chart-mem" class="chart"></div>
-          </div>
-          <div class="chart-panel">
-            <div class="chart-title">磁盘占用率（最大）</div>
-            <div id="chart-disk" class="chart"></div>
-          </div>
-          <div class="chart-panel">
-            <div class="chart-title">网络吞吐（总）</div>
-            <div id="chart-net" class="chart"></div>
-          </div>
-        </div>
-      </section>
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>状态</th>
+                <th>CPU</th>
+                <th>内存</th>
+                <th>磁盘</th>
+                <th>负载</th>
+                <th>网络</th>
+                <th>服务故障</th>
+                <th>Docker</th>
+                <th>错误</th>
+                <th>更新时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="servers-table">
+              <tr><td colspan="12" class="muted">加载中...</td></tr>
+            </tbody>
+          </table>
+        </section>
 
-      <section class="table-panel" aria-label="资源总览">
-        <div class="table-head">
-          <div>
-            <div class="table-title">资源总览（点击行查看单机详情）</div>
-            <div id="table-summary" class="muted">-</div>
+        <section class="detail-panel" aria-label="单机详情">
+          <div class="detail-head">
+            <div class="detail-title-wrap">
+              <div class="detail-title">单机详情</div>
+              <div id="detail-target" class="detail-target muted">未选择服务器</div>
+            </div>
+            <div class="detail-actions">
+              <button id="detail-expand-all-btn" class="button" type="button">展开全部</button>
+              <button id="detail-collapse-all-btn" class="button" type="button">收起全部</button>
+            </div>
           </div>
-          <div class="table-toolbar" aria-label="快捷筛选">
-            <button id="table-quick-all" class="button" type="button">全部</button>
-            <button id="table-quick-alert" class="button" type="button">仅故障</button>
-            <button id="table-quick-online" class="button" type="button">仅在线</button>
-            <button id="table-clear-search" class="button" type="button">清空搜索</button>
+          <div class="detail-tabbar" role="tablist" aria-label="详情视角切换">
+            <button id="detail-tab-overview" class="button detail-tab is-active" type="button" role="tab" aria-selected="true" data-detail-tab="overview">全部</button>
+            <button id="detail-tab-alerts" class="button detail-tab" type="button" role="tab" aria-selected="false" data-detail-tab="alerts">故障定位</button>
+            <button id="detail-tab-system" class="button detail-tab" type="button" role="tab" aria-selected="false" data-detail-tab="system">系统资源</button>
           </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>状态</th>
-              <th>CPU</th>
-              <th>内存</th>
-              <th>磁盘</th>
-              <th>负载</th>
-              <th>网络</th>
-              <th>服务故障</th>
-              <th>Docker</th>
-              <th>错误</th>
-              <th>更新时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="servers-table">
-            <tr><td colspan="12" class="muted">加载中...</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section class="detail-panel" aria-label="单机详情">
-        <div class="detail-head">
-          <div class="detail-title-wrap">
-            <div class="detail-title">单机详情</div>
-            <div id="detail-target" class="detail-target muted">未选择服务器</div>
-          </div>
-          <div class="detail-actions">
-            <button id="detail-expand-all-btn" class="button" type="button">展开全部</button>
-            <button id="detail-collapse-all-btn" class="button" type="button">收起全部</button>
-          </div>
-        </div>
-        <div class="detail-tabbar" role="tablist" aria-label="详情视角切换">
-          <button id="detail-tab-overview" class="button detail-tab is-active" type="button" role="tab" aria-selected="true" data-detail-tab="overview">全部</button>
-          <button id="detail-tab-alerts" class="button detail-tab" type="button" role="tab" aria-selected="false" data-detail-tab="alerts">故障定位</button>
-          <button id="detail-tab-system" class="button detail-tab" type="button" role="tab" aria-selected="false" data-detail-tab="system">系统资源</button>
-        </div>
-        <div id="detail-body" class="detail-body muted">点击上方任意服务器行查看详情</div>
+          <div id="detail-body" class="detail-body muted">点击上方任意服务器行查看详情</div>
+        </section>
       </section>
     </main>
 
