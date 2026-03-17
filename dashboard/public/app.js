@@ -22,6 +22,8 @@ const DEFAULT_ALERTS = {
 const TARGET_META_FIELDS = ["env", "business", "room", "owner"];
 const MAX_SAVED_VIEWS = 20;
 const DEFAULT_KEY_SERVICES = ["nginx", "mysql", "redis", "docker"];
+const CHART_SERIES_CACHE_VERSION = 1;
+const MAX_CHART_CACHE_POINTS = 4320;
 const DETAIL_SECTION_KEYS = [
   "metadata",
   "device-info",
@@ -60,6 +62,7 @@ const STORAGE_KEYS = {
   topControlsCollapsed: "monitor.topControlsCollapsed",
   detailTab: "monitor.detailTab",
   keyServices: "monitor.keyServices",
+  chartSeries: "monitor.chartSeries",
 };
 
 function normalizeServiceKeyword(value) {
@@ -285,6 +288,101 @@ const series = {
   incidentDanger: [],
   incidentOffline: [],
 };
+
+function normalizeSeriesArrayByTimestamps(timestamps, values) {
+  const safeValues = Array.isArray(values) ? values : [];
+  return timestamps.map((_, index) => {
+    const num = Number(safeValues[index]);
+    return Number.isFinite(num) ? num : null;
+  });
+}
+
+function restoreChartSeriesCache() {
+  const raw = String(localStorage.getItem(STORAGE_KEYS.chartSeries) || "").trim();
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Number(parsed?.version) !== CHART_SERIES_CACHE_VERSION) return false;
+    const cached = parsed?.series;
+    if (!cached || typeof cached !== "object") return false;
+
+    const rawStamps = Array.isArray(cached.stamps) ? cached.stamps : [];
+    const stamps = [];
+    const cpu = [];
+    const mem = [];
+    const disk = [];
+    const net = [];
+    const incidentWarn = [];
+    const incidentDanger = [];
+    const incidentOffline = [];
+
+    for (let i = 0; i < rawStamps.length; i += 1) {
+      const ts = Number(rawStamps[i]);
+      if (!Number.isFinite(ts)) continue;
+      stamps.push(ts);
+      cpu.push(toNumberOrNull(Array.isArray(cached.cpu) ? cached.cpu[i] : null));
+      mem.push(toNumberOrNull(Array.isArray(cached.mem) ? cached.mem[i] : null));
+      disk.push(toNumberOrNull(Array.isArray(cached.disk) ? cached.disk[i] : null));
+      net.push(toNumberOrNull(Array.isArray(cached.net) ? cached.net[i] : null));
+      incidentWarn.push(toNumberOrNull(Array.isArray(cached.incidentWarn) ? cached.incidentWarn[i] : null));
+      incidentDanger.push(
+        toNumberOrNull(Array.isArray(cached.incidentDanger) ? cached.incidentDanger[i] : null)
+      );
+      incidentOffline.push(
+        toNumberOrNull(Array.isArray(cached.incidentOffline) ? cached.incidentOffline[i] : null)
+      );
+    }
+
+    if (!stamps.length) return false;
+    const keep = Math.max(1, Math.min(MAX_POINTS, MAX_CHART_CACHE_POINTS));
+    series.stamps = stamps.slice(-keep);
+    series.cpu = cpu.slice(-keep);
+    series.mem = mem.slice(-keep);
+    series.disk = disk.slice(-keep);
+    series.net = net.slice(-keep);
+    series.incidentWarn = incidentWarn.slice(-keep);
+    series.incidentDanger = incidentDanger.slice(-keep);
+    series.incidentOffline = incidentOffline.slice(-keep);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function persistChartSeriesCache() {
+  if (!Array.isArray(series.stamps) || !series.stamps.length) {
+    localStorage.removeItem(STORAGE_KEYS.chartSeries);
+    return;
+  }
+  const keep = Math.max(1, Math.min(MAX_POINTS, MAX_CHART_CACHE_POINTS));
+  const start = Math.max(0, series.stamps.length - keep);
+  const stamps = series.stamps.slice(start).map((item) => Number(item)).filter((item) => Number.isFinite(item));
+  if (!stamps.length) {
+    localStorage.removeItem(STORAGE_KEYS.chartSeries);
+    return;
+  }
+
+  const payload = {
+    version: CHART_SERIES_CACHE_VERSION,
+    savedAt: Date.now(),
+    series: {
+      stamps,
+      cpu: normalizeSeriesArrayByTimestamps(stamps, series.cpu.slice(start)),
+      mem: normalizeSeriesArrayByTimestamps(stamps, series.mem.slice(start)),
+      disk: normalizeSeriesArrayByTimestamps(stamps, series.disk.slice(start)),
+      net: normalizeSeriesArrayByTimestamps(stamps, series.net.slice(start)),
+      incidentWarn: normalizeSeriesArrayByTimestamps(stamps, series.incidentWarn.slice(start)),
+      incidentDanger: normalizeSeriesArrayByTimestamps(stamps, series.incidentDanger.slice(start)),
+      incidentOffline: normalizeSeriesArrayByTimestamps(stamps, series.incidentOffline.slice(start)),
+    },
+  };
+
+  try {
+    localStorage.setItem(STORAGE_KEYS.chartSeries, JSON.stringify(payload));
+  } catch (_error) {
+    // Ignore storage quota and privacy mode failures.
+  }
+}
 
 function cloneAlerts(alerts) {
   return {
@@ -1053,10 +1151,10 @@ function applyWorkMode() {
 function updateLayoutModeToggle() {
   if (!elements.layoutModeToggle) return;
   const nextMode = state.layoutMode === "compact" ? "wide" : "compact";
-  const nextLabel = nextMode === "compact" ? "????" : "????";
-  const currentLabel = state.layoutMode === "compact" ? "????" : "????";
-  elements.layoutModeToggle.textContent = `???${nextLabel}`;
-  elements.layoutModeToggle.title = `???${currentLabel}`;
+  const nextLabel = nextMode === "compact" ? "紧凑模式" : "宽屏模式";
+  const currentLabel = state.layoutMode === "compact" ? "紧凑模式" : "宽屏模式";
+  elements.layoutModeToggle.textContent = `切换到${nextLabel}`;
+  elements.layoutModeToggle.title = `当前：${currentLabel}`;
 }
 
 
@@ -1577,6 +1675,7 @@ function pushSeries(timestamp, cpu, mem, disk, net, incidentWarn, incidentDanger
       series[key].shift();
     });
   }
+  persistChartSeriesCache();
 }
 
 function calcDiskMax(items) {
@@ -2786,6 +2885,7 @@ function applyHistorySeries(seriesData) {
   series.incidentWarn = series.stamps.map(() => 0);
   series.incidentDanger = series.stamps.map(() => 0);
   series.incidentOffline = series.stamps.map(() => 0);
+  persistChartSeriesCache();
   return true;
 }
 
@@ -3382,9 +3482,13 @@ async function start() {
   updateQuickFilterButtons();
   syncSavedViewControls();
   bindControls();
+  const restoredChartCache = restoreChartSeriesCache();
   await bootstrapSettings();
   const loadedHistory = await reloadHistoryForBucket(state.chartBucket, { silent: true });
-  if (!loadedHistory) {
+  if (!loadedHistory && !restoredChartCache) {
+    updateCharts();
+  }
+  if (restoredChartCache && !loadedHistory) {
     updateCharts();
   }
   render([], false);
